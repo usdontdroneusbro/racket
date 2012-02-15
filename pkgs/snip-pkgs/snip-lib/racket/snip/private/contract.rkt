@@ -9,7 +9,9 @@
          "snip-admin.rkt"
          "style.rkt")
 
-(provide (all-defined-out))
+(provide (except-out (all-defined-out)
+                     cursor% mouse-event% key-event% pasteboard%
+                     editor-stream-in% editor-stream-out% text% popup-menu%))
 
 ;; dummy definitions for contracts
 (define-values (cursor% mouse-event% key-event% pasteboard%

@@ -5,7 +5,7 @@
                  make-base-empty-namespace)
            (only scheme/base) (only scheme/class) ; so that `make-gui-namespace' attaches them
            racket/class
-           racket/draw racket/snip
+           racket/snip
            file/resource
            mzlib/etc
            (prefix wx: "kernel.rkt")
@@ -178,9 +178,7 @@
   (define (spacing-integer? x) (and (exact-integer? x) (<= 0 x 1000)))
   (define (positive-dimension-integer? x) (and (exact-integer? x) (<= 1 x WIN-SIZE-MAX)))
 
-  (provide (all-from racket/draw)
-           (all-from racket/snip)
-           (all-from file/resource))
+  (provide (all-from file/resource))
 
   (provide button%
 	   canvas%
@@ -237,7 +235,6 @@
 	   message+check-box
 	   message-box/custom
 	   message+check-box/custom
-           get-face-list
 	   get-file
 	   get-file-list
 	   put-file
