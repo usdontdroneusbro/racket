@@ -114,77 +114,77 @@ ignore all the symbols from racket/base if a file starts with
                                    rest ...))
 
 (define-module-symbol symbol:normal (name)
-                      (define-methods module-symbol
-                                      (define (get-symbol self) (symbol:normal-name self))
-                                      (define (print self)
-                                        (import-struct ([symbol:normal self])
-                                                       (format "~a" self.name)))))
-
-(define-module-symbol symbol:normal/contract (name contract)
-               (define-methods module-symbol
+                      (methods module-symbol
                                (define (get-symbol self) (symbol:normal-name self))
                                (define (print self)
-                                 (import-struct ([symbol:normal/contract self])
-                                                (format "~a contract ~a" self.name self.contract)))))
+                                 (import-struct ([symbol:normal self])
+                                                (format "~a" self.name)))))
+
+(define-module-symbol symbol:normal/contract (name contract)
+               (methods module-symbol
+                        (define (get-symbol self) (symbol:normal-name self))
+                        (define (print self)
+                          (import-struct ([symbol:normal/contract self])
+                                         (format "~a contract ~a" self.name self.contract)))))
 
 (define-module-symbol symbol:renamed (provided defined)
-               (define-methods module-symbol
-                               (define (get-symbol self) (symbol:renamed-provided self))
-                               (define (print self)
-                                 (import-struct ([symbol:renamed self])
-                                                (format "~a as ~a" self.defined self.provided)))))
+               (methods module-symbol
+                        (define (get-symbol self) (symbol:renamed-provided self))
+                        (define (print self)
+                          (import-struct ([symbol:renamed self])
+                                         (format "~a as ~a" self.defined self.provided)))))
 
 (define-module-symbol symbol:module-exported (where)
-               (define-methods module-symbol
-                               (define/generic symbol-print print)
-                               (define (get-symbol self)
-                                 (raise 'get-symbol "Not defined"))
-                               (define (print self)
-                                 (format "from ~a"
-                                         (module-name
-                                             (symbol:module-exported-where self))
-                                         ))))
+               (methods module-symbol
+                        (define/generic symbol-print print)
+                        (define (get-symbol self)
+                          (raise 'get-symbol "Not defined"))
+                        (define (print self)
+                          (format "from ~a"
+                                  (module-name
+                                   (symbol:module-exported-where self))
+                                  ))))
 
 (define-module-symbol symbol:module-exported-from (original where)
-               (define-methods module-symbol
-                               (define/generic symbol-print print)
-                               (define (get-symbol self)
-                                 (raise 'get-symbol "Not defined"))
-                               (define (print self)
-                                 (import-struct ([symbol:module-exported-from self])
-                                                (format "from ~a ~a"
-                                                        (module-name self.where)
-                                                        (symbol-print self.original))))))
+               (methods module-symbol
+                        (define/generic symbol-print print)
+                        (define (get-symbol self)
+                          (raise 'get-symbol "Not defined"))
+                        (define (print self)
+                          (import-struct ([symbol:module-exported-from self])
+                                         (format "from ~a ~a"
+                                                 (module-name self.where)
+                                                 (symbol-print self.original))))))
 
 (define-module-symbol symbol:module-exported-as
                (where phase-shift imported-name import-shift)
-               (define-methods module-symbol
-                               (define/generic symbol-print print)
-                               (define (get-symbol self)
-                                 (symbol:module-exported-as-imported-name self))
-                               (define (print self)
-                                 (import-struct ([symbol:module-exported-as self])
-                                 (format "from ~a as ~a"
-                                         (module-name self.where)
-                                         self.imported-name)))))
+               (methods module-symbol
+                        (define/generic symbol-print print)
+                        (define (get-symbol self)
+                          (symbol:module-exported-as-imported-name self))
+                        (define (print self)
+                          (import-struct ([symbol:module-exported-as self])
+                                         (format "from ~a as ~a"
+                                                 (module-name self.where)
+                                                 self.imported-name)))))
 
 (define-module-symbol symbol:multiple-modules (symbol modules)
-               (define-methods module-symbol
-                               (define/generic symbol-print print)
-                               (define/generic symbol-get-symbol get-symbol)
-                               (define (get-symbol self)
-                                 (symbol-get-symbol
-                                   (symbol:multiple-modules-symbol self)))
-                               (define (print self)
-                                 (import-struct ([symbol:multiple-modules self])
-                                                (format "~a ~a"
-                                                        (symbol-print self.symbol)
-                                                        (let ([modules self.modules])
-                                                          (if (null? modules)
-                                                            ""
-                                                            (for/fold ([start (symbol-print (car modules))])
-                                                                      ([next (cdr modules)])
-                                                                      (format "~a and ~a" start (symbol-print next))))))))))
+               (methods module-symbol
+                        (define/generic symbol-print print)
+                        (define/generic symbol-get-symbol get-symbol)
+                        (define (get-symbol self)
+                          (symbol-get-symbol
+                           (symbol:multiple-modules-symbol self)))
+                        (define (print self)
+                          (import-struct ([symbol:multiple-modules self])
+                                         (format "~a ~a"
+                                                 (symbol-print self.symbol)
+                                                 (let ([modules self.modules])
+                                                   (if (null? modules)
+                                                       ""
+                                                       (for/fold ([start (symbol-print (car modules))])
+                                                           ([next (cdr modules)])
+                                                         (format "~a and ~a" start (symbol-print next))))))))))
 
 (struct provided (phase variables syntaxes))
 
