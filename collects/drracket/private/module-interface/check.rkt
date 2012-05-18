@@ -10,7 +10,7 @@ ignore all the symbols from racket/base if a file starts with
 |#
 
 (require racket/match
-         generics
+         racket/generics
          racket/pretty
          syntax/parse
          (for-syntax racket/struct-info
