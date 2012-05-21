@@ -23,6 +23,13 @@ vice-versa.
 @; ======================================================================
 @section[#:tag "sequences"]{Sequences}
 
+@(define stream-evaluator
+   (let ([evaluator (make-base-eval)])
+     (evaluator '(require racket/generics))
+     (evaluator '(require racket/list))
+     (evaluator '(require racket/stream))
+     evaluator))
+
 @guideintro["sequences"]{sequences}
 
 A @deftech{sequence} encapsulates an ordered collection of values.
@@ -66,13 +73,55 @@ except that @racket[_k] by itself is not a @tech{stream}.
 
 Custom sequences can be defined using structure type properties.
 The easiest method to define a custom sequence is to use the
-@racket[prop:stream] property and the @racket[generic-stream] extension
-interface. Streams are a suitable abstraction for data
-structures that are directly iterable. The @racket[prop:sequence]
-property provides more flexibility in specifying iteration, such as
-when a pre-processing step is needed to prepare the data for
-iteration.
+@racket[prop:stream] property and the @racket[generic-stream]
+extension interface. Streams are a suitable abstraction for data
+structures that are directly iterable. For example, a list is directly
+iterable with @racket[first] and @racket[rest] but iteration on a
+vector goes through an index. For data structures that are not
+directly iterable, the @deftech{iterator} for the data structure can
+be defined to be a stream (e.g., a structure containing the index
+of a vector).
 
+For example, unrolled linked lists (represented as a list of vectors)
+themeselves do not fit the stream abstraction, but have index-based iterators
+that can be represented as streams:
+
+@examples[#:eval stream-evaluator
+  @code:comment{an iterator for the unrolled linked list}
+  (struct iterator (idx lst)
+    #:property prop:stream
+    (methods generic-stream
+      (define (stream-empty? iter)
+        (define lst (iterator-lst iter))
+        (or (null? lst)
+            (and (>= (iterator-idx iter)
+                     (vector-length (first lst)))
+                 (null? (rest lst)))))
+      (define (stream-first iter)
+        (vector-ref (first (iterator-lst iter))
+                    (iterator-idx iter)))
+      (define (stream-rest iter)
+        (define idx (iterator-idx iter))
+        (define lst (iterator-lst iter))
+        (if (>= idx (sub1 (vector-length (first lst))))
+            (iterator 0 (rest lst))
+            (iterator (add1 idx) lst)))))
+
+  (define (make-iterator ull)
+    (iterator 0 (ull-lov ull)))
+
+  @code:comment{unrolled linked list}
+  (struct ull (lov)
+    #:property prop:sequence
+    make-iterator)
+ 
+  (define ull1 (ull '(#(cracker biscuit) #(cookie scone))))
+  (for/list ([x ull1]) x)
+]
+
+The @racket[prop:sequence] property provides more flexibility in
+specifying iteration, such as when a pre-processing step is needed
+to prepare the data for iteration.
 The @racket[make-do-sequence] function creates a sequence given a
 thunk that returns procedures to implement a sequence, and the
 @racket[prop:sequence] property can be associated with a structure
@@ -743,6 +792,22 @@ A shorthand for nested @racket[stream-cons]es ending with
   @item{@racket[stream-empty?] : accepts one argument}
   @item{@racket[stream-first] : accepts one argument}
   @item{@racket[stream-rest] : accepts one argument}
+]
+
+@examples[#:eval stream-evaluator
+  (define-struct list-stream (v)
+    #:property prop:stream
+    (methods generic-stream
+      (define (stream-empty? generic-stream)
+        (empty? (list-stream-v generic-stream)))
+      (define (stream-first generic-stream)
+        (first (list-stream-v generic-stream)))
+      (define (stream-rest generic-stream)
+        (rest (list-stream-v generic-stream)))))
+
+  (define l1 (list-stream '(1 2)))
+  (stream? l1)
+  (stream-first l1)
 ]}
 
 @; ======================================================================
