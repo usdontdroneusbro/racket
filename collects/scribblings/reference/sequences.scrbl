@@ -1,7 +1,9 @@
 #lang scribble/doc
 @(require "mz.rkt" scribble/scheme
           (for-syntax racket/base)
-          (for-label racket/generator racket/mpair))
+          (for-label racket/generator
+                     racket/generics
+                     racket/mpair))
 
 @(define (info-on-seq where what)
    @margin-note{See @secref[where] for information on using @|what| as
@@ -9,11 +11,12 @@
 
 @title[#:style 'toc #:tag "sequences+streams"]{Sequences and Streams}
 
-@tech{Sequences} and @tech{streams} abstract over iteration of
-elements in a collection. Streams are functional sequences that can be
-used either in a generic way or a stream-specific
-way. @tech{Generators} are closely related stateful objects that can
-be converted to a sequence and vice-versa.
+@tech{Sequences} and @tech{streams} abstract over iteration of elements in a
+collection. Sequences allow iteration with @racket[for] macros or with sequence
+operations such as @racket[sequence-map]. Streams are functional sequences that
+can be used either in a generic way or a stream-specific way. @tech{Generators}
+are closely related stateful objects that can be converted to a sequence and
+vice-versa.
 
 @local-table-of-contents[]
 
@@ -60,6 +63,15 @@ built-in datatypes, the sequence datatype includes the following:
 An @tech{exact number} @racket[_k] that is a non-negative
 @tech{integer} acts as a sequence similar to @racket[(in-range _k)],
 except that @racket[_k] by itself is not a @tech{stream}.
+
+Custom sequences can be defined using structure type properties.
+The easiest method to define a custom sequence is to use the
+@racket[prop:stream] property and the @racket[generic-stream] extension
+interface. Streams are a suitable abstraction for data
+structures that are directly iterable. The @racket[prop:sequence]
+property provides more flexibility in specifying iteration, such as
+when a pre-processing step is needed to prepare the data for
+iteration.
 
 The @racket[make-do-sequence] function creates a sequence given a
 thunk that returns procedures to implement a sequence, and the
@@ -392,6 +404,21 @@ in the sequence.
   the structure and returns a sequence.  If @racket[v] is an instance of
   a structure type with this property, then @racket[(sequence? v)]
   produces @racket[#t].
+
+  Using a pre-existing sequence:
+
+  @examples[
+    (struct my-set (table)
+      #:property prop:sequence
+      (lambda (s)
+        (in-hash-keys (my-set-table s))))
+    (define (make-set . xs)
+      (my-set (for/hash ([x (in-list xs)])
+                (values x #t))))
+    (for/list ([c (make-set 'celeriac 'carrot 'potato)])
+      c)]
+
+  Using @racket[make-do-sequence]:
 
   @let-syntax[([car (make-element-id-transformer
                      (lambda (id) #'@racketidfont{car}))])
