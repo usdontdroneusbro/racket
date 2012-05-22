@@ -529,7 +529,7 @@ Returns a list of the associations from
 
 @defthing[gen:dict any/c]{
 
-A @tech{generic interface} (see @secref["structprops"]) that
+A @tech{generic interface} (see @secref["struct-generics"]) that
 supplies dictionary method implementations for a structure type.
 To supply method implementations, the @racket[methods] form should be used.
 The provided implementations are applied only to instances of the structure
@@ -610,7 +610,7 @@ be a list of two immutable vectors:
 ]
 
 The first vector must be a vector of 10 procedures which match the
-@racket[gen:dict] generic interface (in addition, it must be an
+@racket[gen:dict] @tech{generic interface} (in addition, it must be an
 immutable vector). The second vector must contain six elements; each
 of the first three is a contract for the dictionary type's keys,
 values, and positions, respectively. Each of the second three is

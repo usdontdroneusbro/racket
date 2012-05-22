@@ -60,7 +60,7 @@ implement @racket[gen:dict].
 
 Returns @racket[#t] if @racket[x] is an instance of a struct
 implementing the @tech{ordered dictionary} interface (via
-@racket[prop:ordered-dict]).
+@racket[gen:ordered-dict]).
 }
 
 @deftogether[[
