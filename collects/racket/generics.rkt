@@ -15,8 +15,8 @@
 (define-syntax (define-generics stx) ; allows out-of-order / optional kw args
   (syntax-case stx () ; can't use syntax-parse, since it depends on us
     [(_ (name) (generic . generics-args) ...)
-     (define-generics (name #:defined-table defined-table)
-       (generic . generics-args) ...)]
+     #'(define-generics (name #:defined-table defined-table)
+         (generic . generics-args) ...)]
     [(_ (name #:defined-table defined-table)
         (generic . generics-args) ...)
      (local [(define name-str (symbol->string (syntax-e #'name)))
@@ -25,9 +25,9 @@
                 #'name (string->symbol (apply string-append strs)) #'name))]
       (with-syntax ([name? (id name-str "?")]
                     [gen:name (id "gen:" name-str)])
-       #'(define-generics/pre (gen:name prop:name name?
-                                        #:defined-table defined-table
-                                        ;; the following are not public
-                                        #:coerce-method-table #f
-                                        #:prop-defined-already? #f)
+       #'(define-generics/pre (name gen:name prop:name name?
+                                    #:defined-table defined-table
+                                    ;; the following are not public
+                                    #:coerce-method-table #f
+                                    #:prop-defined-already? #f)
            (generic . generics-args) ...)))]))

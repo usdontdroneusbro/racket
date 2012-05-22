@@ -120,7 +120,7 @@ Syntactically an error when used outside @racket[methods].
 @(define evaluator (new-evaluator))
 
 @examples[#:eval evaluator
-(define-generics (gen:printable prop:printable printable?)
+(define-generics (printable)
   (gen-print gen:printable [port])
   (gen-port-print port gen:printable)
   (gen-print* gen:printable [port] #:width width #:height [height]))
