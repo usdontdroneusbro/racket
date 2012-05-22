@@ -277,7 +277,8 @@
           ;; #:methods gen:foo [(define (meth1 x ...) e ...) ...]
           ;; `gen:foo' is bound to (prop:foo generic ...)
           (define (build-method-table gen specs mthds) ; mthds is syntax
-            (with-syntax ([generics gen]
+            (with-syntax ([(generic ...)
+                           specs]
                           [(mthd-generic ...)
                            (map (λ (g) (datum->syntax mthds (syntax->datum g)))
                                 specs)])
@@ -296,7 +297,7 @@
                            (raise-syntax-error 'define/generic
                              (format "~.s not a method of ~.s"
                                      (syntax->datum #'method-name)
-                                     'generics)
+                                     '#,gen)
                              stx
                              #'method-name)]))])
                    (let ()
@@ -310,7 +311,7 @@
           (unless (identifier? gen:foo) (bad-generics))
           (define gen:foo-val (syntax-local-value gen:foo))
           (unless (and (list? gen:foo-val)
-                       (> (length gen:foo-val) 2))
+                       (>= (length gen:foo-val) 1))
             (bad-generics))
           (define prop:foo    (car gen:foo-val))
           (define meth-specs  (cdr gen:foo-val))

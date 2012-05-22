@@ -2,12 +2,13 @@
 (require racket/local
          (for-syntax racket/base
                      racket/local
-                     racket/syntax))
+                     racket/syntax)
+         (only-in "define-struct.rkt" define/generic))
 
 (define-for-syntax (keyword-stx? v)
   (keyword? (syntax->datum v)))
 
-(provide define-generics)
+(provide define-generics define/generic)
 (define-syntax (define-generics stx)
   (syntax-case stx () ; can't use syntax-parse, since it depends on us
     ;; keyword arguments must _all_ be provided _in_order_. For the
