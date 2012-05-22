@@ -803,6 +803,13 @@ A shorthand for nested @racket[stream-cons]es ending with
   (stream-first l1)
 ]}
 
+@defthing[prop:stream struct-type-property?]{
+  A deprecated structure type property used to define custom
+  extensions to the stream API. Use @racket[gen:stream] instead.
+  Accepts a vector of three procedures taking the same arguments
+  as the methods in @racket[gen:stream].
+}
+
 @; ======================================================================
 @section{Generators}
 

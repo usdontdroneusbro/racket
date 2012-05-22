@@ -593,6 +593,13 @@ type. The following methods can be implemented:
 
 }
 
+@defthing[prop:dict struct-type-property?]{
+  A deprecated structure type property used to define custom extensions
+  to the dictionary API. Use @racket[gen:dict] instead. Accepts a vector
+  of 10 procedures with the same arguments as the methods of
+  @racket[gen:dict].
+}
+
 @defthing[prop:dict/contract struct-type-property?]{
 
 A structure type property for defining dictionaries with

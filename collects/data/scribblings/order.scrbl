@@ -56,6 +56,15 @@ A struct type that implements @racket[gen:ordered-dict] must also
 implement @racket[gen:dict].
 }
 
+@defthing[prop:ordered-dict
+          (struct-type-property/c
+           (vectorof _e/c _e/c _s/c _s/c _s/c _s/c))]{
+  A deprecated structure type property used to defined custom
+  ordered dictionaries. Use @racket[gen:ordered-dict] instead.
+  Accepts a vector of 6 procedures with the same arguments as
+  the methods of @racket[gen:ordered-dict].
+}
+
 @defproc[(ordered-dict? [x any/c]) boolean?]{
 
 Returns @racket[#t] if @racket[x] is an instance of a struct
