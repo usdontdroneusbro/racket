@@ -776,7 +776,7 @@ A shorthand for nested @racket[stream-cons]es ending with
   The new stream is constructed lazily.}
 
 @deftogether[[
-@defthing[generic-stream any/c]
+@defthing[gen:stream any/c]
 @defthing[prop:stream struct-type-property?]]]{
 
   Associates three procedures to a structure type to implement stream
