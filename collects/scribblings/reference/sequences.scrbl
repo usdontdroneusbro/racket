@@ -76,47 +76,45 @@ The easiest method to define a custom sequence is to use the
 @racket[prop:stream] property and the @racket[generic-stream]
 extension interface. Streams are a suitable abstraction for data
 structures that are directly iterable. For example, a list is directly
-iterable with @racket[first] and @racket[rest] but iteration on a
-vector goes through an index. For data structures that are not
-directly iterable, the @deftech{iterator} for the data structure can
-be defined to be a stream (e.g., a structure containing the index
-of a vector).
+iterable with @racket[first] and @racket[rest]. On the other hand,
+vectors are not directly iterable: iteration has to go through an
+index. For data structures that are not directly iterable, the
+@deftech{iterator} for the data structure can be defined to be a
+stream (e.g., a structure containing the index of a vector).
 
 For example, unrolled linked lists (represented as a list of vectors)
 themeselves do not fit the stream abstraction, but have index-based iterators
 that can be represented as streams:
 
 @examples[#:eval stream-evaluator
-  @code:comment{an iterator for the unrolled linked list}
-  (struct iterator (idx lst)
+  (struct unrolled-list-iterator (idx lst)
     #:property prop:stream
     (methods generic-stream
       (define (stream-empty? iter)
-        (define lst (iterator-lst iter))
+        (define lst (unrolled-list-iterator-lst iter))
         (or (null? lst)
-            (and (>= (iterator-idx iter)
+            (and (>= (unrolled-list-iterator-idx iter)
                      (vector-length (first lst)))
                  (null? (rest lst)))))
       (define (stream-first iter)
-        (vector-ref (first (iterator-lst iter))
-                    (iterator-idx iter)))
+        (vector-ref (first (unrolled-list-iterator-lst iter))
+                    (unrolled-list-iterator-idx iter)))
       (define (stream-rest iter)
-        (define idx (iterator-idx iter))
-        (define lst (iterator-lst iter))
+        (define idx (unrolled-list-iterator-idx iter))
+        (define lst (unrolled-list-iterator-lst iter))
         (if (>= idx (sub1 (vector-length (first lst))))
-            (iterator 0 (rest lst))
-            (iterator (add1 idx) lst)))))
+            (unrolled-list-iterator 0 (rest lst))
+            (unrolled-list-iterator (add1 idx) lst)))))
 
-  (define (make-iterator ull)
-    (iterator 0 (ull-lov ull)))
+  (define (make-unrolled-list-iterator ul)
+    (unrolled-list-iterator 0 (unrolled-list-lov ul)))
 
-  @code:comment{unrolled linked list}
-  (struct ull (lov)
+  (struct unrolled-list (lov)
     #:property prop:sequence
-    make-iterator)
+    make-unrolled-list-iterator)
  
-  (define ull1 (ull '(#(cracker biscuit) #(cookie scone))))
-  (for/list ([x ull1]) x)
+  (define ul1 (unrolled-list '(#(cracker biscuit) #(cookie scone))))
+  (for/list ([x ul1]) x)
 ]
 
 The @racket[prop:sequence] property provides more flexibility in
