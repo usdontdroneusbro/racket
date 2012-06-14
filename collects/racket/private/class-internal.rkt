@@ -5,7 +5,7 @@
          racket/contract/combinator
          (only-in racket/contract/region current-contract-region)
          (only-in racket/contract/private/arrow making-a-method method-contract?)
-         (only-in racket/list remove-duplicates) 
+         (only-in racket/list remove-duplicates)
          racket/stxparam
          racket/unsafe/ops
          "serialize-structs.rkt"
@@ -433,26 +433,24 @@
 
     ;; Turn keyword arguments into normal inits
     (define (process-kws exprs)
-      ;; For each clause, convert kws
+      ;; Convert kws in a declaration to inits
+      ;; syntax pair-> syntax pair
       (define (process-clause clause)
-        (cond [(null? clause) '()]
-              ;; at this point we know if there's a keyword
-              ;; then there is a value after it
-              [(keyword? (syntax-e (car clause)))
-               (let ([kw (car clause)])
-                 (displayln )
-                 (let ([snd (cadr clause)])
-                   (if (identifier? snd)
-                       (cons #`(#,snd #,(kw->id kw))
-                             (process-clause (cddr clause)))
-                       (cons #`((#,(stx-car snd) #,(kw->id kw))
-                                #,(stx-car (stx-cdr snd)))
-                             (process-clause (cddr clause))))))]
-              [else (cons (car clause) (process-clause (cdr clause)))]))
+        (define fst (stx-car clause))
+        (define snd (stx-cdr clause))
+        (define (process-pairs ps)
+          (for/list ([p ps])
+            (if (keyword? (syntax-e (stx-car p)))
+                (datum->syntax p (cons (kw->id) (stx-cdr p)))
+                p)))
+        #`(#,fst #,(datum->syntax snd (process-pairs (syntax->list snd)))))
       (for/list ([clause exprs])
+        ; (printf "clause: ~a~n" clause)
+        ; (printf "clause again: ~a~n" (stx-cdr clause))
         (if (or (free-identifier=? (stx-car clause) #'-init)
                 (free-identifier=? (stx-car clause) #'-init-field))
-            (process-clause (syntax->list clause))
+            (begin0 (process-clause (stx-cdr clause))
+              (printf "clause: ~a~n" (syntax->list (process-clause (stx-cdr clause)))))
             clause)))
     
     (define (normalize-init/field i)
@@ -890,8 +888,7 @@
                                                              -rename-inner)))
                                     defn-and-exprs
                                     cons)]
-                          [(exprs) (begin0 (process-kws exprs)
-                                     (displayln (process-kws exprs)))]
+                          [(exprs) (process-kws exprs)]
                           [(inspect-decls exprs)
                            (extract (list (quote-syntax -inspect))
                                     exprs
