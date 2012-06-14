@@ -5,11 +5,12 @@
          racket/contract/combinator
          (only-in racket/contract/region current-contract-region)
          (only-in racket/contract/private/arrow making-a-method method-contract?)
-         (only-in racket/list remove-duplicates)
+         (only-in racket/list remove-duplicates) 
          racket/stxparam
          racket/unsafe/ops
          "serialize-structs.rkt"
          (for-syntax racket/stxparam
+                     (only-in racket/syntax format-id)
                      syntax/kerncase
                      syntax/stx
                      syntax/name
@@ -425,8 +426,37 @@
     
     ;; Used with flatten:
     (define (pair i) (cons i i))
+
+    ;; Convert keyword to init arg name
+    (define (kw->id stx)
+      (format-id stx "~a" (keyword->string (syntax-e stx))))
+
+    ;; Turn keyword arguments into normal inits
+    (define (process-kws exprs)
+      ;; For each clause, convert kws
+      (define (process-clause clause)
+        (cond [(null? clause) '()]
+              ;; at this point we know if there's a keyword
+              ;; then there is a value after it
+              [(keyword? (syntax-e (car clause)))
+               (let ([kw (car clause)])
+                 (displayln )
+                 (let ([snd (cadr clause)])
+                   (if (identifier? snd)
+                       (cons #`(#,snd #,(kw->id kw))
+                             (process-clause (cddr clause)))
+                       (cons #`((#,(stx-car snd) #,(kw->id kw))
+                                #,(stx-car (stx-cdr snd)))
+                             (process-clause (cddr clause))))))]
+              [else (cons (car clause) (process-clause (cdr clause)))]))
+      (for/list ([clause exprs])
+        (if (or (free-identifier=? (stx-car clause) #'-init)
+                (free-identifier=? (stx-car clause) #'-init-field))
+            (process-clause (syntax->list clause))
+            clause)))
     
     (define (normalize-init/field i)
+      (displayln i)
       ;; Put i in ((iid eid) optional-expr) form
       (cond
         [(identifier? i) (list (list i i))]
@@ -705,24 +735,20 @@
                            (and (identifier? (syntax form))
                                 (or (free-identifier=? (syntax form) (quote-syntax -init))
                                     (free-identifier=? (syntax form) (quote-syntax -init-field))))
-                           
-                           (let ([form (syntax-e (stx-car (syntax orig)))])
-                             (for-each 
-                              (lambda (idp)
-                                (syntax-case idp ()
-                                  [id (identifier? (syntax id)) 'ok]
-                                  [((iid eid)) (and (identifier? (syntax iid))
-                                                    (identifier? (syntax eid))) 'ok]
-                                  [(id expr) (identifier? (syntax id)) 'ok]
-                                  [((iid eid) expr) (and (identifier? (syntax iid))
-                                                         (identifier? (syntax eid))) 'ok]
-                                  [else
-                                   (bad 
-                                    (format
-                                     "~a element is not an optionally renamed identifier or identifier-expression pair"
-                                     form)
-                                    idp)]))
-                              (syntax->list (syntax (idp ...)))))]
+
+                           (let ()
+                             (define-syntax-class maybe-renamed
+                               (pattern name:id)
+                               (pattern (iid:id eid:id)))
+                             (define-splicing-syntax-class kw-arg
+                               (pattern (~seq kw:keyword [iid:id val:expr]))
+                               (pattern (~and kw:keyword iid:id)))
+                             (define-syntax-class init-arg
+                               (pattern name:maybe-renamed)
+                               (pattern [name:maybe-renamed val:expr]))
+                             (syntax-parse #'(idp ...)
+                               [((~or kw-init:kw-arg init:init-arg) ...) 'ok])
+                             (syntax->list (syntax (idp ...))))]
                           [(-inspect expr)
                            'ok]
                           [(-inspect . rest)
@@ -864,13 +890,15 @@
                                                              -rename-inner)))
                                     defn-and-exprs
                                     cons)]
+                          [(exprs) (begin0 (process-kws exprs)
+                                     (displayln (process-kws exprs)))]
                           [(inspect-decls exprs)
                            (extract (list (quote-syntax -inspect))
                                     exprs
                                     cons)]
                           [(plain-inits)
                            ;; Normalize after, but keep un-normal for error reporting
-                           (flatten #f (extract* (syntax-e 
+                           (flatten #f (extract* (syntax-e
                                                   (quote-syntax (-init -init-rest)))
                                                  exprs))]
                           [(normal-plain-inits) (map normalize-init/field plain-inits)]
@@ -879,7 +907,7 @@
                                     exprs
                                     void)]
                           [(inits)
-                           (flatten #f (extract* (syntax-e 
+                           (flatten #f (extract* (syntax-e
                                                   (quote-syntax (-init -init-field)))
                                                  exprs))]
                           [(normal-inits)
@@ -3808,24 +3836,26 @@ An example
 ;;  instantiation
 ;;--------------------------------------------------------------------
 
+(begin-for-syntax
+  ;; turn keywords into init arg names
+  (define (kws->inits kws)
+    (for/list ([kw (in-list (syntax->list kws))])
+      (format-id kws "~a" (keyword->string (syntax-e kw)))))
+
+  ;; init arg name & value bindings
+  (define-syntax-class init-binding
+    #:description "name and value binding"
+    (pattern [name:id val:expr])))
+
 (define-syntax (new stx)
-  (syntax-case stx ()
-    [(_ cls (id arg) ...)
-     (andmap identifier? (syntax->list (syntax (id ...))))
+  (syntax-parse stx
+    [(_ cls nv:init-binding ...)
      (quasisyntax/loc stx
-       (instantiate cls () (id arg) ...))]
-    [(_ cls (id arg) ...)
-     (for-each (lambda (id)
-                 (unless (identifier? id)
-                   (raise-syntax-error 'new "expected identifier" stx id)))
-               (syntax->list (syntax (id ...))))]
-    [(_ cls pr ...)
-     (for-each
-      (lambda (pr)
-        (syntax-case pr ()
-          [(x y) (void)]
-          [else (raise-syntax-error 'new "expected name and value binding" stx pr)]))
-      (syntax->list (syntax (pr ...))))]))
+       (instantiate cls () nv ...))]
+    [(_ cls (~seq kw:keyword val:expr) ...)
+     (with-syntax ([(kw ...) (kws->inits (syntax (kw ...)))])
+      (quasisyntax/loc stx
+        (instantiate cls () [kw val] ...)))]))
 
 (define ((make-object/proc blame) class . args)
   (do-make-object blame class args null))
@@ -3855,17 +3885,23 @@ An example
 ;; Helper; used by instantiate and super-instantiate
 (define-syntax -instantiate
   (lambda (stx)
-    (syntax-case stx ()
-      [(_ do-make-object orig-stx first? (maker-arg ...) args (kw arg) ...)
-       (andmap identifier? (syntax->list (syntax (kw ...))))
-       (with-syntax ([(kw ...) (map localize (syntax->list (syntax (kw ...))))]
+    (syntax-parse stx
+      [(_ do-make-object orig-stx first? (maker-arg ...) args init:init-binding ...)
+       (with-syntax ([(kw ...) (map localize (syntax->list (syntax (init.name ...))))]
                      [(blame ...) (if (syntax-e #'first?) #'((current-contract-region)) null)])
          (syntax/loc stx
            (do-make-object blame ...
                            maker-arg ...
                            args
-                           (list (cons `kw arg)
-                                 ...))))]
+                           (list (cons `kw init.value) ...))))]
+      [(_ do-make-object orig-stx first? (maker-arg ...) args (~seq kw:keyword val:expr) ...)
+       (with-syntax ([(kw ...) (map localize (kws->inits (syntax (kw ...))))]
+                     [(blame ...) (if (syntax-e #'first?) #'((current-contract-region)) null)])
+         (syntax/loc stx
+           (do-make-object blame ...
+                           maker-arg ...
+                           args
+                           (list (cons `kw val) ...))))]
       [(_ super-make-object orig-stx first? (make-arg ...) args kwarg ...)
        ;; some kwarg must be bad:
        (for-each (lambda (kwarg)
