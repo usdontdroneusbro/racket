@@ -433,28 +433,34 @@
 
     ;; Turn keyword arguments into normal inits
     (define (process-kws exprs)
-      ;; Convert kws in a declaration to inits
-      ;; syntax pair-> syntax pair
+      ;; syntax list -> syntax list
       (define (process-clause clause)
-        (define fst (stx-car clause))
-        (define snd (stx-cdr clause))
-        (define (process-pairs ps)
-          (for/list ([p ps])
-            (if (keyword? (syntax-e (stx-car p)))
-                (datum->syntax p (cons (kw->id) (stx-cdr p)))
-                p)))
-        #`(#,fst #,(datum->syntax snd (process-pairs (syntax->list snd)))))
+        (define (process-inits ps)
+          (cond [(null? ps) '()]
+                [(keyword? (syntax-e (car ps)))
+                 (define eid (kw->id (car ps)))
+                 (cons
+                  (cond [(identifier? (cadr ps))
+                         (datum->syntax #f (cons eid (cadr ps)))]
+                        [else
+                         (define iid (stx-car (cadr ps)))
+                         (define expr (stx-cdr (cadr ps)))
+                         (datum->syntax #f (cons (list eid iid) expr))])
+                  (process-inits (cddr ps)))]
+                [else (cons (car ps) (process-inits (cdr ps)))]))
+        (define pairs (process-inits (syntax->list clause)))
+        (datum->syntax #f pairs))
       (for/list ([clause exprs])
-        ; (printf "clause: ~a~n" clause)
-        ; (printf "clause again: ~a~n" (stx-cdr clause))
-        (if (or (free-identifier=? (stx-car clause) #'-init)
-                (free-identifier=? (stx-car clause) #'-init-field))
-            (begin0 (process-clause (stx-cdr clause))
-              (printf "clause: ~a~n" (syntax->list (process-clause (stx-cdr clause)))))
+        (if (and (stx-pair? clause)
+                 (identifier? (stx-car clause))
+                 (or (free-identifier=? (stx-car clause) #'-init)
+                     (free-identifier=? (stx-car clause) #'-init-field)))
+            (datum->syntax clause (cons (stx-car clause)
+                                        (cons (car (stx-cdr clause))
+                                              (process-clause (stx-cdr (stx-cdr clause))))))
             clause)))
     
     (define (normalize-init/field i)
-      (displayln i)
       ;; Put i in ((iid eid) optional-expr) form
       (cond
         [(identifier? i) (list (list i i))]
@@ -736,17 +742,21 @@
 
                            (let ()
                              (define-syntax-class maybe-renamed
+                               #:description "maybe renamed"
                                (pattern name:id)
                                (pattern (iid:id eid:id)))
                              (define-splicing-syntax-class kw-arg
+                               #:description "keyword init argument"
                                (pattern (~seq kw:keyword [iid:id val:expr]))
-                               (pattern (~and kw:keyword iid:id)))
+                               (pattern (~seq kw:keyword iid:id)))
                              (define-syntax-class init-arg
-                               (pattern name:maybe-renamed)
-                               (pattern [name:maybe-renamed val:expr]))
+                               #:description "init argument"
+                               (pattern name:id)
+                               (pattern (renamed:maybe-renamed))
+                               (pattern (renamed:maybe-renamed val:expr)))
                              (syntax-parse #'(idp ...)
-                               [((~or kw-init:kw-arg init:init-arg) ...) 'ok])
-                             (syntax->list (syntax (idp ...))))]
+                               [(init:init-arg ...) 'ok]
+                               [((~or kw-init:kw-arg init:init-arg) ...) 'ok]))]
                           [(-inspect expr)
                            'ok]
                           [(-inspect . rest)
@@ -3890,7 +3900,7 @@ An example
            (do-make-object blame ...
                            maker-arg ...
                            args
-                           (list (cons `kw init.value) ...))))]
+                           (list (cons `kw init.val) ...))))]
       [(_ do-make-object orig-stx first? (maker-arg ...) args (~seq kw:keyword val:expr) ...)
        (with-syntax ([(kw ...) (map localize (kws->inits (syntax (kw ...))))]
                      [(blame ...) (if (syntax-e #'first?) #'((current-contract-region)) null)])
