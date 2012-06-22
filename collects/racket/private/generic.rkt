@@ -1,5 +1,7 @@
 #lang racket/base
 (require racket/local
+         racket/contract/base
+         racket/contract/combinator
          (for-syntax racket/base
                      racket/local
                      racket/syntax)
@@ -135,6 +137,10 @@
                (for/hash ([name (in-list '(#,@(map syntax->datum generics)))]
                           [gen (in-vector (get-generics this))])
                  (values name (not (not gen)))))
+             ;; Define the contract that goes with this generic interface
+             (define-generics-contract header name? get-generics
+               (generic generic-idx) ...)
+             ;; Define generic functions
              (define generic
                (generic-arity-coerce
                 (make-keyword-procedure
@@ -156,3 +162,106 @@
                              (error 'generic "not implemented for ~e" this)))
                        (raise-argument-error 'generic name-str this))))))
              ...)))]))
+
+;; generate a contract combinator for instances of a generic interface
+(define-syntax (define-generics-contract stx)
+  (syntax-case stx ()
+    [(_ name name? accessor (generic generic-idx) ...)
+     (with-syntax ([name/c (format-id #'name "~a/c" #'name)])
+       #'(define-syntax (name/c stx)
+           (syntax-case stx ()
+             [(_ [method-id ctc] (... ...))
+              (andmap (λ (id) (and (identifier? id)
+                                   ;; make sure the ids are all
+                                   ;; in the interface
+                                   (member (syntax-e id) (list 'generic ...))))
+                      (syntax->list #'(method-id  (... ...))))
+              #'(make-generic-instance/c
+                 name?
+                 accessor
+                 (list 'method-id (... ...))
+                 (list ctc (... ...))
+                 (make-immutable-hash
+                  (list (cons 'generic generic-idx) ...)))])))]))
+
+;; make a generic instance contract
+(define (make-generic-instance/c name? accessor ids ctc-args method-map)
+  (define ctcs (coerce-contracts 'generic-instance/c ctc-args))
+  ;; create a mapping of method table indices to contract projections
+  (define proj-map
+    (for/hash ([id ids] [ctc ctcs])
+      (values (hash-ref method-map id) (contract-projection ctc))))
+  (define method-map
+    (for/hash ([id (hash-keys method-map)]
+               [idx (hash-values method-map)])
+      (values idx id)))
+  (cond [(andmap chaperone-contract? ctcs)
+         (chaperone-generic-instance/c
+          name? ids ctcs accessor proj-map method-map)]
+        [else
+         (impersonator-generic-instance/c
+          name? ids ctcs accessor proj-map method-map)]))
+
+(define (generic-instance/c-name ctc)
+  (define method-names
+    (map (λ (id ctc) (build-compound-type-name id ctc))
+         (base-generic-instance/c-ids ctc)
+         (base-generic-instance/c-ctcs ctc)))
+  (apply build-compound-type-name
+         (cons 'generic-instance/c method-names)))
+
+;; redirect for use with chaperone-vector
+(define ((method-table-redirect ctc blame) vec idx val)
+  (define proj-map (base-generic-instance/c-proj-map ctc))
+  (define method-map (base-generic-instance/c-method-map ctc))
+  (define blame-string (format "the ~a method of"(hash-ref method-map idx)))
+  (define maybe-proj (hash-ref proj-map idx #f))
+  (if maybe-proj
+      ((maybe-proj (blame-add-context blame blame-string)) val)
+      val))
+
+;; projection for generic methods
+(define ((generic-instance/c-proj proxy-struct) ctc)
+  (λ (blame)
+    ;; for redirecting the method table accessor
+    (define (redirect struct v)
+      (chaperone-vector
+       v
+       (method-table-redirect ctc blame)
+       (λ (vec i v) v)))
+    (λ (val)
+      (unless (contract-first-order-passes? ctc val)
+        (raise-blame-error
+         blame val
+         '(expected: "~s," given: "~e")
+         (contract-name ctc)
+         val))
+      (define accessor (base-generic-instance/c-accessor ctc))
+      (proxy-struct val accessor redirect))))
+
+;; recognizes instances of this generic interface
+(define ((generic-instance/c-first-order ctc) v)
+  ((base-generic-instance/c-name? ctc) v))
+
+;; name?      - for first-order checks
+;; ids        - for method names (used to build the ctc name)
+;; ctcs       - for the contract name
+;; accessor   - for chaperoning the struct type property
+;; proj-map   - for chaperoning the method table vector
+;; method-map - for adding blame context based on idx
+(struct base-generic-instance/c
+  (name? ids ctcs accessor proj-map method-map))
+
+(struct chaperone-generic-instance/c base-generic-instance/c ()
+  #:property prop:chaperone-contract
+  (build-chaperone-contract-property
+   #:projection (generic-instance/c-proj chaperone-struct)
+   #:first-order generic-instance/c-first-order
+   #:name generic-instance/c-name))
+
+(struct impersonator-generic-instance/c base-generic-instance/c ()
+  #:property prop:contract
+  (build-contract-property
+   #:projection (generic-instance/c-proj impersonate-struct)
+   #:first-order generic-instance/c-first-order
+   #:name generic-instance/c-name))
