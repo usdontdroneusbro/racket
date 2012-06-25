@@ -187,20 +187,17 @@
 ;; make a generic instance contract
 (define (make-generic-instance/c name? accessor ids ctc-args method-map)
   (define ctcs (coerce-contracts 'generic-instance/c ctc-args))
-  ;; create a mapping of method table indices to contract projections
-  (define proj-map
+  ;; map method table indices to ids & projections
+  (define id+ctc-map
     (for/hash ([id ids] [ctc ctcs])
-      (values (hash-ref method-map id) (contract-projection ctc))))
-  (define method-map
-    (for/hash ([id (hash-keys method-map)]
-               [idx (hash-values method-map)])
-      (values idx id)))
+      (values (hash-ref method-map id)
+              (cons id (contract-projection ctc)))))
   (cond [(andmap chaperone-contract? ctcs)
          (chaperone-generic-instance/c
-          name? ids ctcs accessor proj-map method-map)]
+          name? ids ctcs accessor id+ctc-map method-map)]
         [else
          (impersonator-generic-instance/c
-          name? ids ctcs accessor proj-map method-map)]))
+          name? ids ctcs accessor id+ctc-map method-map)]))
 
 (define (generic-instance/c-name ctc)
   (define method-names
@@ -212,13 +209,14 @@
 
 ;; redirect for use with chaperone-vector
 (define ((method-table-redirect ctc blame) vec idx val)
-  (define proj-map (base-generic-instance/c-proj-map ctc))
-  (define method-map (base-generic-instance/c-method-map ctc))
-  (define blame-string (format "the ~a method of"(hash-ref method-map idx)))
-  (define maybe-proj (hash-ref proj-map idx #f))
-  (if maybe-proj
-      ((maybe-proj (blame-add-context blame blame-string)) val)
-      val))
+  (define id+ctc-map (base-generic-instance/c-id+ctc-map ctc))
+  (define maybe-id+ctc (hash-ref id+ctc-map idx #f))
+  (cond [maybe-id+ctc
+         (define id (car maybe-id+ctc))
+         (define proj (cdr maybe-id+ctc))
+         (define blame-string (format "the ~a method of" id))
+         ((proj (blame-add-context blame blame-string)) val)]
+        [else val]))
 
 ;; projection for generic methods
 (define ((generic-instance/c-proj proxy-struct) ctc)
@@ -241,16 +239,27 @@
 
 ;; recognizes instances of this generic interface
 (define ((generic-instance/c-first-order ctc) v)
-  ((base-generic-instance/c-name? ctc) v))
+  (cond [((base-generic-instance/c-name? ctc) v)
+         (define accessor (base-generic-instance/c-accessor ctc))
+         (define method-table (accessor v))
+         (define ids (base-generic-instance/c-ids ctc))
+         (define ctcs (base-generic-instance/c-ctcs ctc))
+         (define method-map (base-generic-instance/c-method-map ctc))
+         ;; do sub-contract first-order checks
+         (for/and ([id ids] [ctc ctcs])
+           (contract-first-order-passes?
+            ctc
+            (vector-ref method-table (hash-ref method-map id))))]
+        [else #f]))
 
-;; name?      - for first-order checks
-;; ids        - for method names (used to build the ctc name)
-;; ctcs       - for the contract name
-;; accessor   - for chaperoning the struct type property
-;; proj-map   - for chaperoning the method table vector
-;; method-map - for adding blame context based on idx
+;; name?       - for first-order checks
+;; ids         - for method names (used to build the ctc name)
+;; ctcs        - for the contract name
+;; accessor    - for chaperoning the struct type property
+;; id+ctc-map  - for chaperoning the method table vector
+;; method-map  - for first-order checks
 (struct base-generic-instance/c
-  (name? ids ctcs accessor proj-map method-map))
+  (name? ids ctcs accessor id+ctc-map method-map))
 
 (struct chaperone-generic-instance/c base-generic-instance/c ()
   #:property prop:chaperone-contract
