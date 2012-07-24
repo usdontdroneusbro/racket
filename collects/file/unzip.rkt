@@ -82,9 +82,10 @@
                          (when close-orig? (close-input-port in)))))))
 
 ;; make-filter-input-port : (input-port output-port -> any) [input-port] [boolean] -> input-port
-(define make-filter-input-port
-  (lambda (transform [in (current-input-port)] [close-orig? #f])
-    (make-filter-input-port/debug transform in close-orig? #f)))
+(define (make-filter-input-port transform
+                                [in (current-input-port)]
+                                [close-orig? #f])
+  (make-filter-input-port/debug transform in close-orig? #f))
 
 ;; dirname : path -> path
 (define (dirname p)
@@ -114,12 +115,14 @@
                          (if big-endian? start-k (sub1 end-k)))))
 
 ;; bytes->integer : bytes boolean [boolean] [nat] [nat] -> exact-integer
-(define bytes->integer
-  (lambda (bytes signed? [big-endian? (system-big-endian?)] [start-k 0] [end-k (bytes-length bytes)])
-    (let ([unsigned (bytes->unsigned bytes start-k end-k big-endian?)])
-      (if (and signed? (negative-bytes? bytes start-k end-k big-endian?))
-          (- (add1 (bitwise-xor unsigned (ones-mask (- end-k start-k)))))
-          unsigned))))
+(define (bytes->integer bytes signed?
+                        [big-endian? (system-big-endian?)]
+                        [start-k 0]
+                        [end-k (bytes-length bytes)])
+  (let ([unsigned (bytes->unsigned bytes start-k end-k big-endian?)])
+    (if (and signed? (negative-bytes? bytes start-k end-k big-endian?))
+        (- (add1 (bitwise-xor unsigned (ones-mask (- end-k start-k)))))
+        unsigned)))
 
 ;; bytes->unsigned : bytes nat nat boolean -> nat
 ;; interprets a byte string as an unsigned integer
@@ -140,25 +143,23 @@
 
 ;; skip-bytes : nat [input-port] -> any
 ;; skips the given number of bytes from an input port
-(define skip-bytes
-  (lambda (k [in (current-input-port)])
-    (read-bytes k in)
-    (void)))
+(define (skip-bytes k [in (current-input-port)])
+  (read-bytes k in)
+  (void))
 
 ;; read-integer : nat boolean [input-port] [boolean] -> exact-integer
 ;; reads a two's-complement integer from an input port
-(define read-integer
-  (lambda (k signed? [in (current-input-port)] [big-endian? (system-big-endian?)])
-    (bytes->integer (read-bytes k in) signed? big-endian?)))
+(define (read-integer k signed?
+                      [in (current-input-port)]
+                      [big-endian? (system-big-endian?)])
+  (bytes->integer (read-bytes k in) signed? big-endian?))
 
 ;; peek-integer : nat boolean [input-port] [boolean] -> exact-integer
 ;; reads a two's-complement integer from an input port without advancing
-(define peek-integer
-  (lambda (k signed? [in (current-input-port)] [big-endian? (system-big-endian?)])
-    (bytes->integer (peek-bytes k 0 in) signed? big-endian?)))
-
-(define mode-symbol?
-  (symbols 'linefeed 'return 'return-linefeed 'any 'any-one))
+(define (peek-integer k signed?
+                      [in (current-input-port)]
+                      [big-endian? (system-big-endian?)])
+  (bytes->integer (peek-bytes k 0 in) signed? big-endian?))
 
 ;; ===========================================================================
 ;; ZIP CONSTANTS
