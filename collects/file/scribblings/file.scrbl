@@ -9,6 +9,7 @@
 @include-section["gzip.scrbl"]
 @include-section["gunzip.scrbl"]
 @include-section["zip.scrbl"]
+@include-section["unzip.scrbl"]
 @include-section["tar.scrbl"]
 @include-section["md5.scrbl"]
 @include-section["sha1.scrbl"]

@@ -1,25 +1,53 @@
 #lang racket
+
+;; Library for unzipping zip archives
+
+(require racket/file
+         racket/port
+         file/gunzip)
+
+(provide
+ (contract-out
+  [exn:fail:unzip? (any/c . -> . boolean?)]
+  [exn:fail:unzip:no-such-entry? (any/c . -> . boolean?)]
+  [make-exn:fail:unzip
+   (string? continuation-mark-set? . -> . exn:fail:unzip?)]
+  [make-exn:fail:unzip:no-such-entry
+   (string? continuation-mark-set? bytes? . -> . exn:fail:unzip:no-such-entry?)]
+  [exn:fail:unzip:no-such-entry-entry
+   (exn:fail:unzip:no-such-entry? . -> . bytes?)]
+  [zip-directory? (any/c . -> . boolean?)]
+  [zip-directory-entries (zip-directory? . -> . (listof bytes?))]
+  [zip-directory-contains?
+   ((or/c string? path? bytes?) zip-directory? . -> . boolean?)]
+  [zip-directory-includes-directory?
+   ((or/c string? path? bytes?) zip-directory? . -> . boolean?)]
+
+  [output-flag/c contract?]
+
+  [unzip
+   (() (input-port? (bytes? boolean? input-port? . -> . any)) . ->* . any)]
+  [read-zip-directory ((or/c string? path?) . -> . zip-directory?)]
+  [unzip-entry (((or/c string? path?) zip-directory? bytes?)
+                ((bytes? boolean? input-port? . -> . any))
+                . ->* .
+                any)]
+  [path->zip-path ((or/c string? path?) . -> . bytes?)]
+  [make-filesystem-entry-reader
+   (() (output-flag/c) . ->* . (bytes? boolean? input-port? . -> . any))]
+  [make-piped-entry-reader
+   (output-port? . -> . (bytes? boolean? input-port? . -> . any))]))
+
 (module io racket
   (require racket/async-channel
            racket/file
+           (only-in unstable/contract option/c)
            (except-in racket/contract case->)
-           (only-in (lib "contract.ss") ->r case->))
-  
-  (define optional/c (lambda (contract) (or/c contract false/c)))
+           (only-in mzlib/contract ->r case->))
   
   ;; ===========================================================================
   ;; UTILITIES
   ;; ===========================================================================
-  
-  ;; with-output-to-string
-  ;; captures all standard output in a string
-  #;(define-syntax with-output-to-string
-    (syntax-rules ()
-      [(_ e1 e2 ...)
-       (let ([p (open-output-string)])
-         (parameterize ([current-output-port p])
-           e1 e2 ...
-           (get-output-string p)))]))
   
   ;; with-temporary-file
   ;; creates a temporary file and automatically deletes it when finished
@@ -344,7 +372,7 @@
                     . ->* .
                     exact-integer/c)]
    [integer->bytes ((exact-integer/c boolean?)
-                    (boolean? (optional/c natural-number/c))
+                    (boolean? (option/c natural-number/c))
                     . ->* .
                     bytes?)]
    [seekable-port? (port? . -> . boolean?)]
@@ -382,7 +410,7 @@
                  . ->* .
                  any)]
    [write-integer ((exact-integer/c boolean?)
-                   (output-port? boolean? (optional/c natural-number/c))
+                   (output-port? boolean? (option/c natural-number/c))
                    . ->* .
                    any)]
    [write-c-string ((bytes?)
@@ -445,10 +473,7 @@
 
 (require (submod "." zip-constants)
          (submod "." io)
-         (submod "." file)
-         racket/file
-         racket/port
-         file/gunzip)
+         (submod "." file))
 
 ;; ===========================================================================
 ;; DATATYPES AND UTILITIES
@@ -687,29 +712,3 @@
 
 (define output-flag/c
   (symbols 'error 'replace 'truncate 'truncate/replace 'append 'update))
-
-
-(provide/contract
- [exn:fail:unzip? (any/c . -> . boolean?)]
- [exn:fail:unzip:no-such-entry? (any/c . -> . boolean?)]
- [make-exn:fail:unzip (string? continuation-mark-set? . -> . exn:fail:unzip?)]
- [make-exn:fail:unzip:no-such-entry (string? continuation-mark-set? bytes? . -> . exn:fail:unzip:no-such-entry?)]
- [exn:fail:unzip:no-such-entry-entry (exn:fail:unzip:no-such-entry? . -> . bytes?)]
- [zip-directory? (any/c . -> . boolean?)]
- [zip-directory-entries (zip-directory? . -> . (listof bytes?))]
- [zip-directory-contains? ((or/c string? path? bytes?) zip-directory? . -> . boolean?)]
- [zip-directory-includes-directory? ((or/c string? path? bytes?) zip-directory? . -> . boolean?)])
-
-(provide/contract
- [output-flag/c contract?])
-
-(provide/contract
- [unzip (() (input-port? (bytes? boolean? input-port? . -> . any)) . ->* . any)]
- [read-zip-directory ((or/c string? path?) . -> . zip-directory?)]
- [unzip-entry (((or/c string? path?) zip-directory? bytes?)
-               ((bytes? boolean? input-port? . -> . any))
-               . ->* .
-               any)]
- [path->zip-path ((or/c string? path?) . -> . bytes?)]
- [make-filesystem-entry-reader (() (output-flag/c) . ->* . (bytes? boolean? input-port? . -> . any))]
- [make-piped-entry-reader (output-port? . -> . (bytes? boolean? input-port? . -> . any))])
