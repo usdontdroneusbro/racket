@@ -378,12 +378,12 @@ scheme_init_fun (Scheme_Env *env)
   scheme_add_global_constant("impersonate-prompt-tag",
                              scheme_make_prim_w_arity(impersonate_prompt_tag,
 						      "impersonate-prompt-tag",
-						      3, -1),
+						      4, -1),
                              env);
   scheme_add_global_constant("chaperone-prompt-tag",
                              scheme_make_prim_w_arity(chaperone_prompt_tag,
 						      "chaperone-prompt-tag",
-						      3, -1),
+						      4, -1),
                              env);
 
   scheme_add_global_constant("call-with-semaphore",
@@ -4747,16 +4747,10 @@ call_cc (int argc, Scheme_Object *argv[])
 {
   scheme_check_proc_arity("call-with-current-continuation", 1,
 			  0, argc, argv);
-  if (argc > 1) {
-    if (!SAME_TYPE(scheme_prompt_tag_type, SCHEME_TYPE(argv[1]))) {
-      if (SCHEME_NP_CHAPERONEP(argv[1])
-          && SCHEME_PROMPT_TAGP(SCHEME_CHAPERONE_VAL(argv[1])))
-        argv[1] = SCHEME_CHAPERONE_VAL(argv[1]);
-      else
-        scheme_wrong_contract("call-with-current-continuation", "continuation-prompt-tag?",
-                          1, argc, argv);
-    }
-  }
+  if (argc > 1)
+    if (!SCHEME_CHAPERONE_PROMPT_TAGP(argv[1]))
+      scheme_wrong_contract("call-with-current-continuation", "continuation-prompt-tag?",
+                        1, argc, argv);
 
   /* Trampoline to internal_call_cc. This trampoline ensures that
      the runstack is flushed before we try to grab the continuation. */
@@ -5295,12 +5289,39 @@ static void restore_continuation(Scheme_Cont *cont, Scheme_Thread *p, int for_pr
   }
 }
 
+static Scheme_Object **chaperone_do_callcc(Scheme_Object *obj, Scheme_Object *cont)
+{
+  Scheme_Chaperone *px;
+  Scheme_Object *val = cont;
+  Scheme_Object *proc;
+  Scheme_Object *argv2[2];
+
+  while (1) {
+    if (SCHEME_PROMPT_TAGP(obj)) {
+      return val;
+    } else {
+      px = (Scheme_Chaperone *)obj;
+      obj = px->prev;
+
+      proc = SCHEME_VEC_ELS(px->redirects)[2];
+      argv2[0] = val;
+      argv2[1] = proc;
+      
+      if (!(SCHEME_CHAPERONE_FLAGS(px) & SCHEME_CHAPERONE_IS_IMPERSONATOR))
+        val = chaperone_procedure(2, argv2);
+      else
+        val = impersonate_procedure(2, argv2);
+    }
+  }
+}
+
 static Scheme_Object *
 internal_call_cc (int argc, Scheme_Object *argv[])
 {
   Scheme_Object *ret, * volatile prompt_tag;
   Scheme_Cont * volatile cont;
   Scheme_Cont *sub_cont;
+  Scheme_Object *orig_prompt_tag = NULL;
   Scheme_Meta_Continuation *prompt_cont, *barrier_cont;
   MZ_MARK_POS_TYPE prompt_pos, barrier_pos;
   Scheme_Thread *p = scheme_current_thread;
@@ -5308,10 +5329,19 @@ internal_call_cc (int argc, Scheme_Object *argv[])
   Scheme_Object *ec;
   GC_CAN_IGNORE void *stack_start;
   int composable;
+  int is_chaperoned = 0;
 
-  if (argc > 1)
-    prompt_tag = argv[1];
-  else
+      
+  if (argc > 1) {
+    if (SCHEME_NP_CHAPERONEP(argv[1])
+        && SCHEME_PROMPT_TAGP(SCHEME_CHAPERONE_VAL(argv[1]))) {
+      prompt_tag = SCHEME_CHAPERONE_VAL(argv[1]);
+      orig_prompt_tag = argv[1];
+      is_chaperoned = 1;
+    }
+    else
+      prompt_tag = argv[1];
+  } else
     prompt_tag = scheme_default_prompt_tag;
 
   composable = (argc > 2);
@@ -5436,6 +5466,11 @@ internal_call_cc (int argc, Scheme_Object *argv[])
 
   cont = grab_continuation(p, 0, composable, prompt_tag, sub_cont, 
                            prompt, prompt_cont, effective_barrier_prompt);
+
+  /* apply proxy redirect if necessary */
+  if (is_chaperoned) {
+    chaperone_do_callcc(orig_prompt_tag, cont);
+  }
 
   scheme_zero_unneeded_rands(p);
 
@@ -5718,10 +5753,15 @@ Scheme_Object *do_chaperone_prompt_tag (const char *name, int is_impersonator, i
     scheme_wrong_contract(name, "procedure?", 1, argc, argv);
   if (!SCHEME_PROCP(argv[2]))
     scheme_wrong_contract(name, "procedure?", 2, argc, argv);
+  if (!SCHEME_PROCP(argv[3]))
+    scheme_wrong_contract(name, "procedure?", 3, argc, argv);
 
-  redirects = scheme_make_pair(argv[1], argv[2]);
+  redirects = scheme_make_vector(3, NULL);
+  SCHEME_VEC_ELS(redirects)[0] = argv[1];
+  SCHEME_VEC_ELS(redirects)[1] = argv[2];
+  SCHEME_VEC_ELS(redirects)[2] = argv[3];
 
-  props = scheme_parse_chaperone_props(name, 3, argc, argv);
+  props = scheme_parse_chaperone_props(name, 4, argc, argv);
 
   px = MALLOC_ONE_TAGGED(Scheme_Chaperone);
   px->iso.so.type = scheme_chaperone_type;
@@ -6167,9 +6207,9 @@ static Scheme_Object **chaperone_do_control(const char *name, int is_prompt, Sch
       obj = px->prev;
 
       if (is_prompt)
-        proc = SCHEME_CAR(px->redirects);
+        proc = SCHEME_VEC_ELS(px->redirects)[0];
       else
-        proc = SCHEME_CDR(px->redirects);
+        proc = SCHEME_VEC_ELS(px->redirects)[1];
 
       v = _scheme_apply_multi(proc, argc, argv);
 

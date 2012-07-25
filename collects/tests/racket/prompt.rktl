@@ -165,37 +165,43 @@
   (impersonate-prompt-tag
    (make-continuation-prompt-tag)
    (lambda (x) (* x 2))
-   (lambda (x) (+ x 1))))
+   (lambda (x) (+ x 1))
+   values))
 
 (define imp-tag-2
   (impersonate-prompt-tag
    (make-continuation-prompt-tag)
    (lambda (x y) (values (* x 2) (* y 2)))
-   (lambda (x y) (values (+ x 1) (+ y 1)))))
+   (lambda (x y) (values (+ x 1) (+ y 1)))
+   values))
 
 (define imp-tag-3
   (impersonate-prompt-tag
    (make-continuation-prompt-tag)
    (lambda (x y) (values (* x 2) (* y 2)))
-   (lambda (x y) x)))
+   (lambda (x y) x)
+   values))
 
 (define imp-tag-4
   (impersonate-prompt-tag
    (make-continuation-prompt-tag)
    (lambda (x y) (values x x x))
-   (lambda (x y) (values x y))))
+   (lambda (x y) (values x y))
+   values)
 
 (define cha-tag
   (chaperone-prompt-tag
    (make-continuation-prompt-tag)
    (lambda (x) (if (number? x) x (error "fail")))
-   (lambda (x) x)))
+   (lambda (x) x)
+   values))
 
 (define bad-tag
   (chaperone-prompt-tag
    (make-continuation-prompt-tag)
    (lambda (x) 42)
-   (lambda (x) x)))
+   (lambda (x) x)
+   values)
 
 (define (do-test tag . rst)
   (call-with-continuation-prompt
