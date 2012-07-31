@@ -924,6 +924,7 @@ typedef struct Scheme_Jumpup_Buf_Holder {
 typedef struct Scheme_Continuation_Jump_State {
   struct Scheme_Object *jumping_to_continuation;
   struct Scheme_Object *alt_full_continuation;
+  Scheme_Object *prompt_tag; /* invocation prompt tag */
   Scheme_Object *val; /* or **vals */
   mzshort num_vals;
   char is_kill, is_escape, skip_dws;

@@ -3644,6 +3644,7 @@ static void reset_cjs(Scheme_Continuation_Jump_State *a)
 {
   a->jumping_to_continuation = NULL;
   a->alt_full_continuation = NULL;
+  a->prompt_tag = NULL;
   a->val = NULL;
   a->num_vals = 0;
   a->is_kill = 0;
@@ -4759,6 +4760,7 @@ call_cc (int argc, Scheme_Object *argv[])
 
 static Scheme_Cont *grab_continuation(Scheme_Thread *p, int for_prompt, int composable,
                                       Scheme_Object *prompt_tag,
+                                      Scheme_Object *original_prompt_tag,
                                       Scheme_Cont *sub_cont, Scheme_Prompt *prompt,
                                       Scheme_Meta_Continuation *prompt_cont, 
                                       Scheme_Prompt *effective_barrier_prompt
@@ -4801,6 +4803,7 @@ static Scheme_Cont *grab_continuation(Scheme_Thread *p, int for_prompt, int comp
   if (!for_prompt)
     ASSERT_SUSPEND_BREAK_ZERO();
   copy_cjs(&cont->cjs, &p->cjs);
+  cont->cjs->prompt_tag = original_prompt_tag;
   cont->save_overflow = p->overflow;
   scheme_save_env_stack_w_thread(cont->ss, p);
   cont->runstack_size = p->runstack_size;
