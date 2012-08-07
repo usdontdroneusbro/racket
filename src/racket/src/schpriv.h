@@ -1526,6 +1526,7 @@ typedef struct Scheme_Cont {
   intptr_t runstack_size;
   Scheme_Saved_Stack *runstack_saved;
   Scheme_Object *prompt_tag;
+  Scheme_Object *orig_prompt_tag;
   mz_jmp_buf *prompt_buf; /* needed for meta-prompt */
   MZ_MARK_POS_TYPE meta_tail_pos; /* to recognize opportunity for meta-tail calls */
   MZ_MARK_POS_TYPE cont_mark_pos_bottom; /* to splice cont mark values with meta-cont */

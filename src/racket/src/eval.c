@@ -1490,6 +1490,30 @@ static int exec_dyn_wind_posts(Scheme_Dynamic_Wind *common, Scheme_Cont *c, int 
   return common_depth;
 }
 
+static Scheme_Object *make_extra_cont;
+
+static void init_make_extra_cont()
+{
+  if (!make_extra_cont) {
+    char *e = "(lambda (cont prompt-tag redirect)"
+                "(lambda args"
+                  "(redirect"
+                   "(call-with-continuation-prompt"
+                     "(lambda () (apply cont args))"
+                     "prompt-tag"
+                     "(lambda args"
+                       "(apply abort-current-continuation"
+                              "(cons prompt-tag args)))))))";
+
+    Scheme_Env *env = (Scheme_Env *)scheme_make_namespace(0, NULL);
+
+    scheme_register_extension_global(&make_extra_cont,
+                                     sizeof(Scheme_Object *));
+
+    make_extra_cont = scheme_eval_string(e, env);
+  }
+}
+
 Scheme_Object *scheme_jump_to_continuation(Scheme_Object *obj, int num_rands, Scheme_Object **rands, 
                                            Scheme_Object **old_runstack, int can_ec)
 {
@@ -1507,6 +1531,17 @@ Scheme_Object *scheme_jump_to_continuation(Scheme_Object *obj, int num_rands, Sc
     make_tail_buffer_safe();
 
   c = (Scheme_Cont *)obj;
+
+  if (c->orig_prompt_tag) {
+    Scheme_Object *argv[3];
+    init_make_extra_cont();
+
+    argv[0] = c;
+    argv[1] = c->prompt_tag;
+    argv[2] = c->prompt_prompt_tag;
+  
+    c = _scheme_apply(make_extra_cont, 3, argv);
+  }
   
   if (can_ec
       && c->escape_cont

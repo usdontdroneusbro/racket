@@ -4803,7 +4803,7 @@ static Scheme_Cont *grab_continuation(Scheme_Thread *p, int for_prompt, int comp
   if (!for_prompt)
     ASSERT_SUSPEND_BREAK_ZERO();
   copy_cjs(&cont->cjs, &p->cjs);
-  cont->cjs->prompt_tag = original_prompt_tag;
+  cont->cjs.prompt_tag = original_prompt_tag;
   cont->save_overflow = p->overflow;
   scheme_save_env_stack_w_thread(cont->ss, p);
   cont->runstack_size = p->runstack_size;
@@ -5292,12 +5292,11 @@ static void restore_continuation(Scheme_Cont *cont, Scheme_Thread *p, int for_pr
   }
 }
 
-static Scheme_Object **chaperone_do_callcc(Scheme_Object *obj, Scheme_Object *cont)
+static Scheme_Object **chaperone_do_callcc(Scheme_Object *obj, Scheme_Object *val)
 {
   Scheme_Chaperone *px;
-  Scheme_Object *val = cont;
   Scheme_Object *proc;
-  Scheme_Object *argv2[2];
+  Scheme_Object *argv2[1];
 
   while (1) {
     if (SCHEME_PROMPT_TAGP(obj)) {
@@ -5308,12 +5307,12 @@ static Scheme_Object **chaperone_do_callcc(Scheme_Object *obj, Scheme_Object *co
 
       proc = SCHEME_VEC_ELS(px->redirects)[2];
       argv2[0] = val;
-      argv2[1] = proc;
+
+      val = scheme_apply(proc, 1, argv2);
       
       if (!(SCHEME_CHAPERONE_FLAGS(px) & SCHEME_CHAPERONE_IS_IMPERSONATOR))
-        val = chaperone_procedure(2, argv2);
-      else
-        val = impersonate_procedure(2, argv2);
+        if (!scheme_chaperone_of(val, argv2[0]))
+            scheme_wrong_chaperoned("call-with-current-continuation", "value", argv2[0], val);
     }
   }
 }
@@ -5467,13 +5466,8 @@ internal_call_cc (int argc, Scheme_Object *argv[])
     return _scheme_tail_apply(argv[0], 1, argv2);
   }
 
-  cont = grab_continuation(p, 0, composable, prompt_tag, sub_cont, 
+  cont = grab_continuation(p, 0, composable, prompt_tag, orig_prompt_tag, sub_cont, 
                            prompt, prompt_cont, effective_barrier_prompt);
-
-  /* apply proxy redirect if necessary */
-  if (is_chaperoned) {
-    chaperone_do_callcc(orig_prompt_tag, cont);
-  }
 
   scheme_zero_unneeded_rands(p);
 
@@ -5921,6 +5915,7 @@ Scheme_Object *scheme_finish_apply_for_prompt(Scheme_Prompt *prompt, Scheme_Obje
     if (!resume) {
       /* We return NULL if there's an escape of some sort (see above), 
          otherwise we return the result value. */
+      val = chaperone_do_callcc(caller_prompt_tag, val); 
       return val;
     } else if (resume->eot) {
       /* There's nothing left in the continuation, 
@@ -5992,7 +5987,7 @@ static Scheme_Object *compose_continuation(Scheme_Cont *cont, int exec_chain,
 
   /* Grab a continuation so that we capture the current Scheme stack,
      etc.: */
-  saved = grab_continuation(p, 1, 0, NULL, NULL, NULL, NULL, NULL);
+  saved = grab_continuation(p, 1, 0, NULL, NULL, NULL, NULL, NULL, NULL);
 
   if (p->meta_prompt)
     saved->prompt_stack_start = p->meta_prompt->stack_boundary;
@@ -6390,8 +6385,10 @@ static Scheme_Object *call_with_prompt (int in_argc, Scheme_Object *in_argv[])
              is already removed as necessary at the cont call site in "eval.c". 
              Loop, in case we have a kind of tail-call to another such contionuation: */
           Scheme_Cont *target;
+          Scheme_Object *caller_prompt_tag;
 
           target = (Scheme_Cont *)p->cjs.val;
+          caller_prompt_tag = target->cjs.prompt_tag;
           reset_cjs(&p->cjs);
 
           v = compose_continuation(target, 1, (Scheme_Object *)prompt, 0);
@@ -6400,6 +6397,7 @@ static Scheme_Object *call_with_prompt (int in_argc, Scheme_Object *in_argv[])
             /* Got a result: */
             prompt_unwind_one_dw(prompt_tag);
             handler = NULL;
+            v = chaperone_do_callcc(caller_prompt_tag, v); 
           } else {
             /* Escaping, maybe to here... */
             p = scheme_current_thread;
