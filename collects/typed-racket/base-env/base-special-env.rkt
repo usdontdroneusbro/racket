@@ -143,4 +143,17 @@
    (-> Univ Univ Univ Univ Univ)]
   [(make-template-identifier 'missing-kw 'racket/private/kw)
    (->* (list Univ) Univ Univ)]
+  ;; racket/control
+  ;; call-with-shift
+  [(make-template-identifier 'call-with-shift 'racket/control)
+   (-polydots (b c a)
+     (-> (-> (->... '() (a a) b) c)
+         (make-Prompt-Tagof b (-> (-> c) b))
+         (make-ValuesDots '() a 'a)))]
+  ;; fcontrol
+  [(make-template-identifier 'fcontrol 'racket/control)
+   (-poly (b c d a)
+    (->key d
+           #:tag (make-Prompt-Tagof b (-> d (->... '() (a a) b) c)) #t
+           (make-ValuesDots '() a 'a)))]
   )

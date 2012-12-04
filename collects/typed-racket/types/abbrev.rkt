@@ -386,6 +386,9 @@
    [(_ [(dom ...) rng] ...)
     #'(cl->* (dom ... . -> . rng) ...)]))
 
+;; Usage:
+;; (->key type ... #:kw type optional? ... type)
+;; where optional? is a boolean
 (define-syntax (->key stx)
   (syntax-parse stx
                 [(_ ty:expr ... (~seq k:keyword kty:expr opt:boolean) ... rng)
