@@ -44,6 +44,20 @@
              ([r (in-list results)])
              (open-Result r o-a t-a)))
          (ret t-r f-r o-r)))]
+    ;; if there are mandatory keyword args at this point, then no keywords
+    ;; were provided even though some were mandatory
+    [((arr: _ _ _ _ kws) _)
+     (=> fail)
+     (let ()
+       ;; at least one mandatory keyword
+       (define req-kw?
+        (for/or ([keyword kws])
+          (match keyword
+            [(Keyword: kw _ #t) kw]
+            [_ #f])))
+       (unless req-kw? (fail))
+       (when check?
+         (tc-error "Required keyword not supplied: ~a" req-kw?)))]
     [((arr: _ _ _ drest '()) _)
      (int-err "funapp with drest args ~a ~a NYI" drest argtys)]
     [((arr: _ _ _ _ kws) _)
