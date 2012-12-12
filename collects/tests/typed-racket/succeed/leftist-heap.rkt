@@ -207,7 +207,7 @@
 
   (define: list->heap : (All (a) (case-lambda (comparator (list-of a) -> (Heap a)) ((list-of a) -> (Heap a))))
     ; time: O(n)
-    (pcase-lambda:  (a)
+    (case-lambda:
       [([l : (list-of a)])     (list->heap (current-compare) l)]
       [([cmp : comparator] [l : (list-of a)])
        (let* ([e  (#{empty @ a} cmp)]
@@ -242,7 +242,7 @@
         (find-min s)))
 
   (define: singleton : (All (a) (case-lambda (a -> (Heap a)) (comparator a -> (Heap a))))
-    (pcase-lambda: (a)
+    (case-lambda:
       [([x : a])     (insert x (#{empty @ a}))]
       [([cmp : comparator] [x : a]) (insert x (make-heap-empty cmp))]))
 

@@ -91,10 +91,10 @@
 
 
 (define: mymap : (All (a b) ((a -> b) (Listof a) -> (Listof b)))
-  (plambda: (a b) ([f : (a -> b)] [l : (Listof a)])
-	    (cond [(null? l) '()]
-		  [else (cons (f (car l))
-			      (mymap f (cdr l)))])))
+  (lambda: ([f : (a -> b)] [l : (Listof a)])
+    (cond [(null? l) '()]
+          [else (cons (f (car l))
+                      (mymap f (cdr l)))])))
 
 (mymap add1 (cons 1 (cons 2 (cons 3 #{'() :: (Listof number)}))))
 

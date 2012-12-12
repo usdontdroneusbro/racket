@@ -356,10 +356,10 @@
 
 ;; FIXME
 (define: mymap : (All (a b) ((a -> b) (list-of a) -> (list-of b)))
-  (plambda: (a b) ([f : (a -> b)] [l : (list-of a)])
-	    (cond [(null? l) '()]
-		  [else (cons (f (car l))
-			      (mymap f (cdr l)))])))
+  (lambda: ([f : (a -> b)] [l : (list-of a)])
+    (cond [(null? l) '()]
+          [else (cons (f (car l))
+                      (mymap f (cdr l)))])))
 
 (mymap add1 (cons 1 (cons 2 (cons 3 '()))))
 
