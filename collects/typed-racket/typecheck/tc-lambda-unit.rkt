@@ -291,15 +291,17 @@
       [(tc-result1: (and v (Values: _))) (maybe-loop form formals bodies (values->tc-results v #f))]
       [_ (int-err "expected not an appropriate tc-result: ~a" expected)]))
   (match expected
-    [(tc-result1: (and t (Poly-names: ns expected*)))
+    [(tc-result1: (and t (Poly-fresh: ns fresh-ns expected*)))
      (let* ([tvars (let ([p (plambda-prop form)])
                      (when (and (pair? p) (eq? '... (car (last p))))
                        (tc-error
                         "Expected a polymorphic function without ..., but given function had ..."))
-                     (or (and p (map syntax-e (syntax->list p)))
-                         ns))]
-            [ty (extend-tvars tvars
-                  (maybe-loop form formals bodies (ret expected*)))])
+                     (and p (map syntax-e (syntax->list p))))]
+            [ty (if tvars
+                    (extend-tvars tvars
+                      (maybe-loop form formals bodies (ret expected*)))
+                    (extend-tvars/new ns fresh-ns
+                      (maybe-loop form formals bodies (ret expected*))))])
        ;(printf "plambda: ~a ~a ~a \n" literal-tvars new-tvars ty)
        t)]
     [(tc-result1: (and t (PolyDots-names: (list ns ... dvar) expected*)))
