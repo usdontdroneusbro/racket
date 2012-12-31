@@ -296,9 +296,10 @@
           (list
            (make-arr-dots (map parse-type (syntax->list #'(dom ...)))
                           (parse-values-type #'rng)
-                          (extend-tvars (list bnd)
+                          ;; bound indexes must be looked up in Theta
+                          (extend-tvars/new (list bnd) (list (F-n (lookup-index bnd)))
                             (parse-type #'rest))
-                          bnd))))]
+                          (F-n (lookup-index bnd))))))]
       [(dom:non-keyword-ty ... rest:non-keyword-ty _:ddd (~and kw t:->) rng)
        (add-disappeared-use #'kw)
        (let ([var (infer-index stx)])
@@ -329,6 +330,15 @@
          ;; if it's a type variable, we just produce the corresponding reference (which is in the HT)
          [(bound-tvar? (syntax-e #'id))
           (lookup-tvar (syntax-e #'id))]
+         ;; if it's a type variable bound in the index environment, and its image
+         ;; is also bound in the type environment, then it's a type variable
+         ;; bound by the 'map' rule and we look it up appropriately
+         ;;
+         ;; NOTE: this seems like a hack, so make sure it does not trigger
+         ;;       in other circumstances
+         [(and (bound-index? (syntax-e #'id))
+               (bound-tvar? (F-n (lookup-index (syntax-e #'id)))))
+          (lookup-tvar (F-n (lookup-index (syntax-e #'id))))]
          ;; if it was in current-indexes, produce a better error msg
          [(bound-index? (syntax-e #'id))
           (tc-error
@@ -393,9 +403,9 @@
                (tc-error/stx #'bound "Type variable ~a is unbound" var)))
          (-Tuple* (map parse-type (syntax->list #'(tys ...)))
                   (make-ListDots
-                   (extend-tvars (list var)
+                   (extend-tvars/new (list var) (list (F-n (lookup-index var)))
                      (parse-type #'dty))
-                   var)))]
+                   (F-n (lookup-index var)))))]
       [((~and kw t:List) tys ... dty _:ddd)
        (add-disappeared-use #'kw)
        (let ([var (infer-index stx)])

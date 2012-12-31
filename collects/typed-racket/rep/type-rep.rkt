@@ -639,10 +639,10 @@
      (instantiate-many (map *F names) scope)]))
 
 ;; the 'smart' constructor
-(define (PolyDots* names body)
+(define (PolyDots* names body #:original-names [orig names])
   (if (null? names) body
       (let ([v (*PolyDots (length names) (abstract-many names body))])
-        (hash-set! name-table v names)
+        (hash-set! name-table v orig)
         v)))
 
 ;; the 'smart' destructor
@@ -758,12 +758,24 @@
                      (list syms (PolyDots-body* syms t))))
                  (list nps bp)))])))
 
+(define-match-expander PolyDots-fresh:
+  (lambda (stx)
+    (syntax-case stx ()
+      [(_ nps freshp bp)
+       #'(? PolyDots?
+            (app (lambda (t)
+                   (let* ([n (PolyDots-n t)]
+                          [syms (hash-ref name-table t (lambda _ (build-list n (lambda _ (gensym)))))]
+                          [fresh-syms (map gensym syms)])
+                     (list syms fresh-syms (PolyDots-body* fresh-syms t))))
+                 (list nps freshp bp)))])))
+
 ;(trace subst subst-all)
 
 (provide
  Mu-name:
  Poly-names: Poly-fresh:
- PolyDots-names:
+ PolyDots-names: PolyDots-fresh:
  Type-seq
  Mu-unsafe: Poly-unsafe:
  PolyDots-unsafe:

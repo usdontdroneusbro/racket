@@ -169,16 +169,18 @@
               (if (bound-tvar? bound)
                   (tc-error "Bound on ... type (~a) is not an appropriate type variable" bound)
                   (tc-error/stx #'rest "Bound on ... type (~a) was not in scope" bound)))
-            (let ([rest-type (extend-tvars (list bound)
+            ;; actual bound has to be looked up for lexical scoping
+            (define actual-bound (F-n (lookup-index bound)))
+            (let ([rest-type (extend-tvars/new (list bound) (list actual-bound)
                                (get-type #'rest #:default Univ))])
               (with-lexical-env/extend
                (cons #'rest arg-list)
-               (cons (make-ListDots rest-type bound) arg-types)
+               (cons (make-ListDots rest-type actual-bound) arg-types)
                (list (make lam-result
                            (map list arg-list arg-types)
                            null
                            #f
-                           (cons #'rest (cons rest-type bound))
+                           (cons #'rest (cons rest-type actual-bound))
                            (tc-exprs (syntax->list body)))))))]
          [else
           (let ([rest-type (get-type #'rest #:default Univ)])
@@ -314,28 +316,45 @@
            (extend-tvars/new ns fresh-ns
             (maybe-loop form formals bodies (ret expected*))))
        t)]
-    [(tc-result1: (and t (PolyDots-names: (list ns ... dvar) expected*)))
+    [(tc-result1: (and t (PolyDots-fresh: (list ns ... dvar)
+                                          (list fresh-ns ... fresh-dvar)
+                                          expected*)))
      (let-values
-         ([(tvars dotted)
-           (let ([p (plambda-prop form)])
-             (if p
-                 (match (map syntax-e (syntax->list p))
-                   [(list var ... dvar '...)
-                    (values var dvar)]
-                   [_ (tc-error "Expected a polymorphic function with ..., but given function had no ...")])
-                 (values ns dvar)))])
+       ([(tvars dotted)
+         (let ([p (plambda-prop form)])
+           (if p
+               (match (map syntax-e (syntax->list p))
+                 [(list var ... dvar '...)
+                  (values var dvar)]
+                 [_ (tc-error "Expected a polymorphic function with ..., but given function had no ...")])
+               (values #f #f)))])
+       (when tvars
+        (unless (= (length tvars) (length ns))
+          (tc-error "Expected ~a type variables, but given ~a"
+                    (length ns) (length tvars))))
        ;; check the body for side effect
-       (extend-indexes dotted
-         (extend-tvars tvars
-           (maybe-loop form formals bodies (ret expected*))))
+       ;; analogous to non-polydots case
+       (if tvars
+           (extend-indexes/new dvar fresh-dvar
+            (extend-indexes/new dotted fresh-dvar
+             (extend-tvars/new ns fresh-ns
+              (extend-tvars/new tvars fresh-ns
+               (maybe-loop form formals bodies (ret expected*))))))
+           (extend-indexes/new dvar fresh-dvar
+            (extend-tvars/new ns fresh-ns
+             (maybe-loop form formals bodies (ret expected*)))))
        t)]
     [#f
      (match (map syntax-e (syntax->list (plambda-prop form)))
        [(list tvars ... dotted-var '...)
-        (let* ([ty (extend-indexes dotted-var
-                     (extend-tvars tvars
+        (let* (;; same as the Poly case below (but with a dvar)
+               [fresh-dvar (gensym dotted-var)]
+               [fresh-tvars (map gensym tvars)]
+               [ty (extend-indexes/new dotted-var fresh-dvar
+                     (extend-tvars/new tvars fresh-tvars
                        (tc/mono-lambda/type formals bodies #f)))])
-          (make-PolyDots (append tvars (list dotted-var)) ty))]
+          (make-PolyDots (append fresh-tvars (list fresh-dvar)) ty
+                         #:original-names (append tvars (list dotted-var))))]
        [tvars
         (let* (;; manually make some fresh names since
                ;; we don't use a match expander

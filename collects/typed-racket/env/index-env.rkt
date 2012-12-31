@@ -6,24 +6,38 @@
 ;; to types representing the type variable
 ;; technically, the mapped-to type is unnecessary, but it's convenient to have it around? maybe?
 
-(require "../utils/tc-utils.rkt")
-(provide (all-defined-out))
+(require "../utils/tc-utils.rkt"
+         "tvar-env-helper.rkt"
+         (only-in racket/dict dict-keys))
 
-;; the initial type variable environment - empty
-;; this is used in the parsing of types
-(define initial-index-env (list))
+(provide initial-index-env
+         current-indexes
+         extend-indexes
+         extend-indexes/new
+         bound-index?
+         lookup-index
+         infer-index)
 
-;; a parameter for the current type variables
-(define current-indexes (make-parameter initial-index-env))
+(define-tvar-ids
+  initial-index-env
+  current-indexes
+  extend-indexes*
+  extend-indexes/new*
+  bound-index?
+  lookup-index
+  extend
+  extend/many)
 
-;; takes a single index
+;; another set of macros since `extend-indexes` is supposed to
+;; only take a single index despite its name
 (define-syntax-rule (extend-indexes index . body)
- (parameterize ([current-indexes (cons index (current-indexes))]) . body))
+  (extend-indexes* (list index) . body))
 
-(define (bound-index? v) (memq v (current-indexes)))
+(define-syntax-rule (extend-indexes/new index new-index . body)
+  (extend-indexes/new* (list index) (list new-index) . body))
 
 (define (infer-index stx)
-  (define bounds (current-indexes))
+  (define bounds (dict-keys (current-indexes)))
   (when (null? bounds)
     (tc-error/stx stx "No type variable bound with ... in scope for ... type"))
   (unless (null? (cdr bounds))
