@@ -307,22 +307,23 @@
       (read-pkg-db)))
 
   ;; see if the package is installed in any scope
-  (define-values (in-user? in-install? in-version?)
+  (define-values (in-install? in-user? in-shared?)
    (values
-    (and (hash-ref user-db pkg-name #f)
-         "--user")
     (and (hash-ref installation-db pkg-name #f)
          "--installation")
+    (and (hash-ref user-db pkg-name #f)
+         "--user")
     (and (hash-ref version-db pkg-name #f)
          "--shared")))
 
   (define not-installed-msg
-   (cond [(or in-user? in-install? in-version?)
+   (cond [(or in-user? in-install? in-shared?)
           =>
           (λ (scope-str)
-             (~a "package installed in a different scope: "
-                 (or in-user? in-install? in-version?)
-                 "\n"))]
+             (~a "package installed in a different scope\n"
+                 "  consider using: raco pkg remove "
+                 (or in-user? in-install? in-shared?)
+                 " " pkg-name "\n"))]
          [else "package not currently installed\n"]))
 
   (pkg-error (~a not-installed-msg

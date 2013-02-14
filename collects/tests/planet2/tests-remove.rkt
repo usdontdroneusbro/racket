@@ -74,5 +74,6 @@
     (shelly-case
      "different scope error"
      $ "raco pkg install --shared test-pkgs/planet2-test1.zip" =exit> 0
-     $ "raco pkg remove planet2-test1" =stderr> #rx"installed in a different scope: --shared"
-     $ "raco pkg remove --shared planet2-test1" =exit> 0)))))
+     $ "raco pkg remove planet2-test1" =exit> 1
+     =stderr> #rx"package installed in a different scope"
+     $ "raco pkg remove --shared planet2-test1")))))
