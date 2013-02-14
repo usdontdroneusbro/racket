@@ -294,12 +294,12 @@
 ;; prints an error for packages that are not installed
 ;; pkg-name db -> void
 (define (pkg-not-installed pkg-name db)
+  (define installation-db
+    (parameterize ([current-install-system-wide? #t])
+      (read-pkg-db)))
   (define user-db
     (parameterize ([current-install-system-wide? #f]
                    [current-install-version-specific? #t])
-      (read-pkg-db)))
-  (define installation-db
-    (parameterize ([current-install-system-wide? #t])
       (read-pkg-db)))
   (define version-db
     (parameterize ([current-install-system-wide? #f]
@@ -320,10 +320,9 @@
    (cond [(or in-user? in-install? in-shared?)
           =>
           (λ (scope-str)
-             (~a "package installed in a different scope\n"
-                 "  consider using: raco pkg remove "
-                 (or in-user? in-install? in-shared?)
-                 " " pkg-name "\n"))]
+             (~a "package installed in a different scope: "
+                 (substring scope-str 2) "\n"
+                 "  consider using the " scope-str " flag\n\n"))]
          [else "package not currently installed\n"]))
 
   (pkg-error (~a not-installed-msg
