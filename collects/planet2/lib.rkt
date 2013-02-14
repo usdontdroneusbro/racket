@@ -284,13 +284,11 @@
 ;; return the current scope as a string
 ;; -> (or/c "user" "shared" "installation")
 (define (current-scope->string)
-  (cond [(and (not (current-install-system-wide?))
-              (current-install-version-specific?))
-         "user"]
-        [(current-install-system-wide?)
+  (cond [(current-install-system-wide?)
          "installation"]
-        [(and (not (current-install-system-wide?))
-              (not (current-install-version-specific?)))
+        [(current-install-version-specific?)
+         "user"]
+        [else
          "shared"]))
 
 ;; prints an error for packages that are not installed
