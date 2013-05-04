@@ -36,10 +36,11 @@
 (define unann-defs (make-free-id-table))
 
 (define-splicing-syntax-class dtsi-fields
- #:attributes (mutable type-only maker)
+ #:attributes (mutable guard type-only maker)
  (pattern
   (~seq
     (~or (~optional (~and #:mutable (~bind (mutable #t))))
+         (~optional (~seq #:guard guard))
          (~optional (~and #:type-only (~bind (type-only #t))))
          (~optional (~seq #:maker maker))) ...)))
 
@@ -49,11 +50,12 @@
 
 
 (define-syntax-class define-typed-struct
-  #:attributes (name mutable type-only maker nm (tvars 1) (fld 1) (ty 1))
+  #:attributes (name mutable guard type-only maker nm (tvars 1) (fld 1) (ty 1))
   (pattern ((~optional (tvars:id ...) #:defaults (((tvars 1) null)))
             nm:struct-name ([fld:id : ty:expr] ...) fields:dtsi-fields)
            #:attr name #'nm.nm
            #:attr mutable (attribute fields.mutable)
+           #:attr guard (attribute fields.guard)
            #:attr type-only (attribute fields.type-only)
            #:attr maker (attribute fields.maker)))
 
@@ -68,7 +70,8 @@
        (tc/struct (attribute dts.tvars) #'dts.nm (syntax->list #'(dts.fld ...)) (syntax->list #'(dts.ty ...))
                   #:mutable (attribute dts.mutable)
                   #:maker (attribute dts.maker)
-                  #:type-only (attribute dts.type-only))]
+                  #:type-only (attribute dts.type-only)
+                  #:guard (attribute dts.guard))]
 
       ;; executable structs - this is a big hack
       [(define-values () (begin (quote-syntax (define-typed-struct/exec-internal ~! nm ([fld : ty] ...) proc-ty)) (#%plain-app values)))
@@ -89,6 +92,15 @@
   (unless (null? vars)
     (register-type-variance! name (map (lambda (_) Constant) vars))))
 
+;; tc-struct-options : Parsed-Struct -> Void
+;; Type-check struct: options that contain expressions that need to be
+;; type-checked in the second pass
+(define (tc-struct-options pstruct)
+  (when (struct-has-guard? pstruct)
+    (define-values (guard-stx guard-ty)
+      (guard-of-struct pstruct))
+    (define expanded-guard (local-expand guard-stx 'module '()))
+    (tc-expr/check expanded-guard guard-ty)))
 
 
 
@@ -337,10 +349,14 @@
     (for/fold ([h (make-immutable-free-id-table)])
       ([def (in-list defs)])
       (dict-set h (binding-name def) def)))
+
   ;; typecheck the expressions and the rhss of defintions
   ;(displayln "Starting pass2")
   (for-each tc-toplevel/pass2 forms)
+  ;; typecheck additional struct: options in pass 2
+  (for-each tc-struct-options parsed-structs)
   ;(displayln "Finished pass2")
+
   ;; check that declarations correspond to definitions
   (check-all-registered-types)
   ;; report delayed errors

@@ -559,18 +559,22 @@ This file defines two sorts of primitives. All of them are provided into any mod
      (syntax-parse stx
        [(_ vars:maybe-type-vars nm:struct-name (fs:fld-spec ...)
            opts:struct-options)
-        (let ([mutable? (if (attribute opts.mutable?) #'(#:mutable) #'())])
+        (let ([mutable? (if (attribute opts.mutable?) #'(#:mutable) #'())]
+              ;; FIXME: abstract commonality for these cases
+              [guard (if (attribute opts.guard) #'(#:guard opts.guard) #'())])
           (with-syntax ([d-s (syntax-property (syntax/loc stx (define-struct nm (fs.fld ...) . opts))
                                               'typechecker:ignore #t)]
                         [dtsi (quasisyntax/loc stx
                                 (dtsi* (vars.vars ...) nm (fs ...)
-                                       #,@mutable?))])
+                                       #,@mutable?
+                                       #,@guard))])
             #'(begin d-s dtsi)))]))
    (lambda (stx)
      (syntax-parse stx
        [(_ vars:maybe-type-vars nm:struct-name/new (fs:fld-spec ...)
            opts:struct-options)
         (let ([mutable? (if (attribute opts.mutable?) #'(#:mutable) #'())]
+              [guard (if (attribute opts.guard) #'(#:guard opts.guard) #'())]
               [cname (datum->syntax #f (format-symbol "make-~a" (syntax-e #'nm.name)))])
           (with-syntax ([d-s (syntax-property (quasisyntax/loc stx
                                                 (struct #,@(attribute nm.new-spec) (fs.fld ...)
@@ -581,7 +585,8 @@ This file defines two sorts of primitives. All of them are provided into any mod
                                 (dtsi* (vars.vars ...)
                                        nm.old-spec (fs ...)
                                        #:maker #,cname
-                                       #,@mutable?))])
+                                       #,@mutable?
+                                       #,@guard))])
             #'(begin d-s dtsi)))]))))
 
 

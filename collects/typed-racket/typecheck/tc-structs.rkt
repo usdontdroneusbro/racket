@@ -26,7 +26,11 @@
 (require (for-template racket/base
                        "internal-forms.rkt"))
 
-(provide tc/struct name-of-struct d-s
+(provide tc/struct
+         name-of-struct
+         struct-has-guard?
+         guard-of-struct
+         d-s
          refine-struct-variance!
          register-parsed-struct-sty!
          register-parsed-struct-bindings!)
@@ -41,7 +45,8 @@
 ;; desc : struct-desc
 ;; struct-info : struct-info?
 ;; type-only : Boolean
-(struct parsed-struct (sty names desc struct-info type-only) #:transparent)
+;; guard : Syntax
+(struct parsed-struct (sty names desc struct-info type-only guard) #:transparent)
 
 ;; type-name : Id
 ;; struct-type : Id
@@ -73,6 +78,20 @@
                                 (#%plain-app values)))
      #'nm/par.name]))
 
+;; struct-has-guard? : Parsed-Struct -> Boolean
+;; Check if the given parsed struct has a guard or not
+(define (struct-has-guard? pstruct)
+  (and (parsed-struct-guard pstruct) #t))
+
+;; guard-of-struct : Parsed-Struct -> (Values Syntax Type)
+;; Given a parsed struct, return the guard expression and the type it
+;; should have (assuming that it has one).
+(define (guard-of-struct pstruct)
+  (define guard-stx (parsed-struct-guard pstruct))
+  (define desc (parsed-struct-desc pstruct))
+  (define field-tys (struct-desc-self-fields desc))
+  (values guard-stx (->* (append field-tys (list -Symbol))
+                         (-values field-tys))))
 
 ;; parse name field of struct, determining whether a parent struct was specified
 ;; syntax -> (values identifier Option[Name] Option[Struct])
@@ -219,12 +238,12 @@
 
 (define (register-parsed-struct-sty! ps)
   (match ps
-    ((parsed-struct sty names desc si type-only)
+    ((parsed-struct sty names desc si type-only guard)
      (register-sty! sty names desc))))
 
 (define (register-parsed-struct-bindings! ps)
   (match ps
-    ((parsed-struct sty names desc si type-only)
+    ((parsed-struct sty names desc si type-only guard)
      (if type-only
          null
          (register-struct-bindings! sty names desc si)))))
@@ -251,13 +270,14 @@
 
 ;; check and register types for a define struct
 ;; tc/struct : Listof[identifier] (U identifier (list identifier identifier))
-;;             Listof[identifier] Listof[syntax]
+;;             Listof[identifier] Listof[syntax] syntax
 ;;             -> void
 (define (tc/struct vars nm/par fld-names tys
                    #:proc-ty [proc-ty #f]
                    #:maker [maker #f]
                    #:mutable [mutable #f]
-                   #:type-only [type-only #f])
+                   #:type-only [type-only #f]
+                   #:guard [guard #f])
   ;; parent field types can't actually be determined here
   (define-values (nm parent-name parent) (parse-parent nm/par))
   ;; create type variables for the new type parameters
@@ -291,8 +311,8 @@
                  (and proc-ty (parse-type proc-ty))))
   (define sty (mk/inner-struct-type names desc concrete-parent))
 
-  (parsed-struct sty names desc (syntax-property nm/par 'struct-info) type-only))
-
+  (parsed-struct sty names desc (syntax-property nm/par 'struct-info)
+                 type-only guard))
 
 ;; register a struct type
 ;; convenience function for built-in structs
