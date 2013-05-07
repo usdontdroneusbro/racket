@@ -434,13 +434,14 @@
                    n*))))]
         [(Instance: (? Mu? t))
          (t->c (make-Instance (resolve-once t)))]
-        [(Instance: (Class: _ _ (list (list name fcn) ...)))
+        [(Instance: (Class: _ _ _ (list (list name fcn) ...)))
          (set-impersonator!)
          (with-syntax ([(fcn-cnts ...) (for/list ([f (in-list fcn)]) (t->c/fun f #:method #t))]
                        [(names ...) name])
            #'(object/c (names fcn-cnts) ...))]
         ;; init args not currently handled by class/c
-        [(Class: _ (list (list by-name-init by-name-init-ty _) ...) (list (list name fcn) ...))
+        [(Class: _ (list (list by-name-init by-name-init-ty _) ...)
+                 fields (list (list name fcn) ...))
          (set-impersonator!)
          (with-syntax ([(fcn-cnt ...) (for/list ([f (in-list fcn)]) (t->c/fun f #:method #t))]
                        [(name ...) name]

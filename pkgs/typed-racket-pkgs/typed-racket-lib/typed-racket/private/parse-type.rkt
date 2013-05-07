@@ -10,8 +10,13 @@
          syntax/stx (prefix-in c: (contract-req))
          syntax/parse unstable/sequence
          (env tvar-env type-name-env type-alias-env lexical-env index-env)
+         (only-in racket/class init init-field field)
+         (only-in racket/list flatten)
          racket/match
+         racket/syntax
          "parse-classes.rkt"
+         (only-in racket/class init init-field field)
+         (for-template (only-in racket/class init init-field field))
          (for-template racket/base "../base-env/colon.rkt")
          ;; needed at this phase for tests
          "../base-env/colon.rkt"
@@ -187,20 +192,8 @@
       [(fst . rst)
        #:fail-unless (not (syntax->list #'rst)) #f
        (-pair (parse-type #'fst) (parse-type #'rst))]
-      [((~and kw t:Class) (pos-args ...) ([fname fty . rest] ...) ([mname mty] ...))
-       (add-disappeared-use #'kw)
-       (make-Class
-        (parse-types #'(pos-args ...))
-        (map list
-             (stx-map syntax-e #'(fname ...))
-             (parse-types #'(fty ...))
-             (for/list ((e (in-syntax #'(rest ...))))
-               (syntax-case e ()
-                 [(#t) #t]
-                 [_ #f])))
-        (map list
-             (stx-map syntax-e #'(mname ...))
-             (parse-types #'(mty ...))))]
+      [((~and kw t:Class) e ...)
+       (parse-class-type stx)]
       [((~and kw t:Refinement) p?:id)
        (add-disappeared-use #'kw)
        (match (lookup-type/lexical #'p?)
@@ -495,6 +488,89 @@
        (-values (parse-types #'(tys ...)))]
       [t
        (-values (list (parse-type #'t)))])))
+
+;;; Syntax classes and utilities for (Class ...) type parsing
+
+;; Syntax -> Syntax
+;; removes two levels of nesting
+(define (flatten-class-clause stx)
+  (flatten (map stx->list (stx->list stx))))
+
+(define-splicing-syntax-class class-type-clauses
+  #:description "Class type clause"
+  #:attributes (extends-tvar
+                init-names init-types init-optional?s
+                init-field-names init-field-types
+                init-field-optional?s
+                field-names field-types
+                method-names method-types)
+  #:literals (init init-field field)
+  (pattern (~seq (~or (~optional (~seq #:extends extends-tvar))
+                      (init init-clause:init-type ...)
+                      (init-field init-field-clause:init-type ...)
+                      (field field-clause:field-or-method-type ...)
+                      method-clause:field-or-method-type)
+                 ...)
+           ;; FIXME: improve these somehow
+           #:with init-names (flatten-class-clause #'((init-clause.label ...) ...))
+           #:with init-types (flatten-class-clause #'((init-clause.type ...) ...))
+           #:attr init-optional?s (flatten (attribute init-clause.optional?))
+           #:with init-field-names (flatten-class-clause #'((init-field-clause.label ...) ...))
+           #:with init-field-types (flatten-class-clause #'((init-field-clause.type ...) ...))
+           #:attr init-field-optional?s (flatten (attribute init-field-clause.optional?))
+           #:with field-names (flatten-class-clause #'((field-clause.label ...) ...))
+           #:with field-types (flatten-class-clause #'((field-clause.type ...) ...))
+           #:with method-names #'(method-clause.label ...)
+           #:with method-types #'(method-clause.type ...)
+           #:fail-when
+           (check-duplicate-identifier
+            (append (syntax->list #'init-names)
+                    (syntax->list #'init-field-names)))
+           "duplicate init or init-field clause"
+           #:fail-when
+           (check-duplicate-identifier
+            (append (syntax->list #'field-names)
+                    (syntax->list #'init-field-names)))
+           "duplicate field or init-field clause"
+           #:fail-when
+           (check-duplicate-identifier (syntax->list #'method-names))
+           "duplicate method clause"))
+
+(define-syntax-class init-type
+  #:description "Initialization argument label and type"
+  #:attributes (label type optional?)
+  (pattern
+   (label:id type:expr
+    (~optional (~and #:optional (~bind [optional? #t]))))))
+
+(define-syntax-class field-or-method-type
+  #:description "Pair of field or method label and type"
+  #:attributes (label type)
+  (pattern (label:id type:expr)))
+
+;; Syntax (Syntax -> Type) -> Type
+;; Parse a (Class ...) type
+(define (parse-class-type stx)
+  (syntax-parse stx
+    [(kw clause:class-type-clauses)
+     (add-disappeared-use #'kw)
+     (make-Class
+      #f ;; FIXME
+      (map list
+           (append (stx-map syntax-e #'clause.init-names)
+                   (stx-map syntax-e #'clause.init-field-names))
+           (append (stx-map parse-type #'clause.init-types)
+                   (stx-map parse-type #'clause.init-field-types))
+           (append (attribute clause.init-optional?s)
+                   (attribute clause.init-field-optional?s)))
+      (map list
+           (append (stx-map syntax-e #'clause.field-names)
+                   (stx-map syntax-e #'clause.init-field-names))
+           (append (stx-map parse-type #'clause.field-types)
+                   (stx-map parse-type #'clause.init-field-types)))
+      (map list
+           (stx-map syntax-e #'clause.method-names)
+           (stx-map parse-type #'clause.method-types)))]))
 
 (define (parse-tc-results stx)
   (syntax-parse stx #:literals (values)

@@ -10,6 +10,7 @@
          (for-template (base-env base-types base-types-extra base-env colon))
          (private parse-type)
          rackunit
+         (only-in racket/class init init-field field)
          racket/dict)
 
 (provide parse-type-tests)
@@ -140,6 +141,31 @@
    [(Opaque foo?) (make-Opaque #'foo?)]
    ;; PR 14122
    [FAIL (Opaque 3)]
+
+   ;;; Classes
+   [(Class) (make-Class #f null null null)]
+   [(Class (init [x : Number] [y : Number]))
+    (make-Class #f `((x ,-Number #f) (y ,-Number #f)) null null)]
+   [(Class (init [x : Number] [y : Number #:optional?]))
+    (make-Class #f `((x ,-Number #f) (y ,-Number #t)) null null)]
+   [(Class (init [x : Number]) (init-field [y : Number]))
+    (make-Class #f `((x ,-Number #f) (y ,-Number #f)) `((y ,-Number))
+                null)]
+   [(Class [m : (Number -> Number)])
+    (make-Class #f null null `((m ,(t:-> N N))))]
+   [(Class [m : (Number -> Number)] (init [x : Number]))
+    (make-Class #f `((x ,-Number #f)) null `((m ,(t:-> N N))))]
+   [(Class [m : (Number -> Number)] (field [x : Number]))
+    (make-Class #f null `((x ,-Number)) `((m ,(t:-> N N))))]
+   [FAIL (Class foobar)]
+   [FAIL (Class [x : UNBOUND])]
+   [FAIL (Class [x : Number #:random-keyword])]
+   [FAIL (Class (random-clause [x : Number]))]
+   ;; test duplicates
+   [FAIL (Class [x : Number] [x : Number])]
+   [FAIL (Class (init [x : Number]) (init [x : Number]))]
+   [FAIL (Class (init [x : Number]) (init-field [x : Number]))]
+   [FAIL (Class (field [x : Number]) (init-field [x : Number]))]
    ))
 
 ;; FIXME - add tests for parse-values-type, parse-tc-results

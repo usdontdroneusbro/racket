@@ -377,7 +377,7 @@
     [(B: idx) (fp "(B ~a)" idx)]
     [(Syntax: t) (fp "(Syntaxof ~a)" t)]
     [(Instance: t) (fp "(Instance ~a)" t)]
-    [(Class: pf nf ms) (fp "(Class)")]
+    [(Class: pi ni flds ms) (fp "(Class ~a)" ni)]
     [(Result: t (FilterSet: (Top:) (Top:)) (Empty:)) (fp "~a" t)]
     [(Result: t fs (Empty:)) (fp "(~a : ~a)" t fs)]
     [(Result: t fs lo) (fp "(~a : ~a : ~a)" t fs lo)]
