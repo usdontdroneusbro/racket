@@ -232,6 +232,29 @@
                   (format-arr a)
                   (string-join (map format-arr b) (if multi-line? "\n        " " ")))]))]))
 
+;; print-class-type : Type (Any ... -> Void) -> String
+;; Print a class type
+(define (print-class-type type fp)
+  (match-define (Class: _ inits fields methods) type)
+  ;; replace booleans with keyword or nothing in inits
+  (define (transform-inits)
+    (cons 'init
+     (for/list ([init inits])
+       (match-define (list name type opt?) init)
+       (if opt?
+           (list name ': type '#:optional)
+           (list name ': type)))))
+  ;; insert the ':
+  (define (transform-fields)
+    (cons 'field
+     (for/list ([field fields])
+       (match-define (list name type) field)
+       (list name ': type))))
+  (fp "~a"
+      `(Class ,@(if (null? inits) '() (list (transform-inits)))
+              ,@(if (null? fields) '() (list (transform-fields)))
+              ,@methods)))
+
 ;; print out a type
 ;; print-type : Type Port Boolean -> Void
 (define (print-type type port write? [ignored-names '()])
@@ -377,7 +400,7 @@
     [(B: idx) (fp "(B ~a)" idx)]
     [(Syntax: t) (fp "(Syntaxof ~a)" t)]
     [(Instance: t) (fp "(Instance ~a)" t)]
-    [(Class: pi ni flds ms) (fp "(Class ~a)" ni)]
+    [(and ty (Class: _ _ _ _)) (print-class-type ty fp)]
     [(Result: t (FilterSet: (Top:) (Top:)) (Empty:)) (fp "~a" t)]
     [(Result: t fs (Empty:)) (fp "(~a : ~a)" t fs)]
     [(Result: t fs lo) (fp "(~a : ~a : ~a)" t fs lo)]
