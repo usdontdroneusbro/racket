@@ -166,7 +166,10 @@
    [FAIL (Class (init [x : Number]) (init [x : Number]))]
    [FAIL (Class (init [x : Number]) (init-field [x : Number]))]
    [FAIL (Class (field [x : Number]) (init-field [x : Number]))]
-   ))
+   ;; test #:extends
+   [(Class #:extends (Class [m : (Number -> Number)]) (field [x : Number]))
+    (make-Class #f null `((x ,-Number)) `((m ,(t:-> N N))))]
+   [FAIL (Class #:extends (Class [m : (Number -> Number)]) [m : String])]))
 
 ;; FIXME - add tests for parse-values-type, parse-tc-results
 
