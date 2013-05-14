@@ -14,18 +14,16 @@
 ;; but requiring that produces an error when building
 ;; the docs
 (define-type Bitmap%
-  (Class (Real Real Boolean)
-         ()
-         ([get-width (-> Integer)]
-          [get-height (-> Integer)]
-          [get-argb-pixels
-           (case-> 
-            (Integer Integer Integer Integer Bytes
-                     -> Void)
-            (Integer Integer Integer Integer Bytes Boolean
-                     -> Void)
-            (Integer Integer Integer Integer Bytes Boolean Boolean
-                     -> Void))])))
+  (Class [get-width (-> Integer)]
+         [get-height (-> Integer)]
+         [get-argb-pixels
+          (case->
+           (Integer Integer Integer Integer Bytes
+                    -> Void)
+           (Integer Integer Integer Integer Bytes Boolean
+                    -> Void)
+           (Integer Integer Integer Integer Bytes Boolean Boolean
+                    -> Void))]))
 
 (require/typed
  "flomap-convert.rkt"
