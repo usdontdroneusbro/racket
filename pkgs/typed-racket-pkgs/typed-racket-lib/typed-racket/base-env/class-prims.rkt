@@ -17,13 +17,18 @@
           syntax/parse
           syntax/stx
           unstable/list
-          "annotate-classes.rkt"
           "internal.rkt"
           "../utils/tc-utils.rkt"
           "../types/utils.rkt"))
 
 (provide ;; Typed class macro that coordinates with TR
-         class:)
+         class:
+         ;; for use in ~literal clauses
+         class:-internal)
+
+;; give it a binding, but it shouldn't be used directly
+(define-syntax (class:-internal stx)
+  (raise-syntax-error "should only be used internally"))
 
 (begin-for-syntax
  (module+ test (require rackunit))
@@ -223,7 +228,9 @@
               [(define-values (id) . rst)
                #:when (memf (λ (n) (free-identifier=? #'id n))
                             (dict-ref name-dict #'public))
-               (non-clause (syntax-property stx 'tr:class:method #t))]
+               (non-clause (syntax-property stx
+                                            'tr:class:method
+                                            (syntax-e #'id)))]
               ;; FIXME: this needs to handle external/internal names too
               ;; FIXME: this needs to track overrides and other things
               [_ other])))
@@ -232,9 +239,16 @@
         ;; FIXME: should also expand into residual data
         (syntax-property
          (syntax-property
-          #`(class #,annotated-super
-              #,@(map clause-stx clauses)
-              #,@(map non-clause-stx annotated-others))
+          #`(let-values ()
+              #,(internal
+                 ;; FIXME: maybe put this in a macro and/or a syntax class
+                 ;;        so that it's easier to deal with
+                 #`(class:-internal
+                    (init #,@(dict-ref name-dict #'init '()))
+                    (public #,@(dict-ref name-dict #'public '()))))
+              (class #,annotated-super
+                #,@(map clause-stx clauses)
+                #,@(map non-clause-stx annotated-others)))
           'tr:class #t)
          'typechecker:ignore #t)])]))
 

@@ -18,7 +18,8 @@
 
 (require (for-template racket/base racket/private/class-internal))
 
-(import tc-if^ tc-lambda^ tc-app^ tc-let^ tc-send^ check-subforms^ tc-literal^)
+(import tc-if^ tc-lambda^ tc-app^ tc-let^ tc-send^ check-subforms^ tc-literal^
+        check-class^)
 (export tc-expr^)
 
 ;; do-inst : syntax type -> type
@@ -179,6 +180,14 @@
     (syntax-parse form
       #:literal-sets (kernel-literals)
       #:literals (find-method/who)
+      [stx
+       ;; a class: generated class
+       #:when (syntax-property form 'tr:class)
+       ;; use internal TR forms to hide information obtained
+       ;; at the class: level so that inits, fields, and method
+       ;; presence/absence can be checked immediately here
+       (check-class form expected)
+       expected]
       [stx
        #:when (with-handlers-property form)
        (check-subforms/with-handlers/check form expected)]
