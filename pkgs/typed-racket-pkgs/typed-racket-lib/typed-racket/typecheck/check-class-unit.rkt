@@ -111,6 +111,14 @@
                       "public field")
         (check-absent super-field-names this%-field-names "public field")
         (check-absent super-method-names this%-method-names "public method")
+        ;; FIXME: the control flow for the failure of these checks is
+        ;;        still up in the air
+        #;
+        (check-no-extra (set-union this%-field-names super-field-names)
+                        exp-field-names)
+        #;
+        (check-no-extra (set-union this%-method-names super-method-names)
+                        exp-method-names)
         ;; trawl the body and find methods and type-check them
         (define (trawl-for-methods form)
           (syntax-parse form
@@ -204,6 +212,15 @@
   (when present
     (tc-error/expr "superclass defines conflicting ~a ~a"
                    msg present)))
+
+;; check-no-extra : Set<Symbol> Set<Symbol> -> Void
+;; check that the actual names don't include names not in the
+;; expected type (i.e., the names must exactly match up)
+(define (check-no-extra actual expected)
+  (printf "actual : ~a expected : ~a~n" actual expected)
+  (unless (subset? actual expected)
+    ;; FIXME: better error reporting here
+    (tc-error/expr "class defines names not in expected type")))
 
 ;; I wish I could write this
 #;
