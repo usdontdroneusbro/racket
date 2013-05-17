@@ -12,6 +12,7 @@
          "tc-funapp.rkt"
          "tc-subst.rkt"
          (private type-annotation)
+         (env lexical-env)
          (types utils abbrev union subtype resolve)
          (utils tc-utils)
          (rep type-rep)
@@ -117,17 +118,26 @@
              (apply append (map trawl-for-methods (syntax->list #'(e ...))))]
             [_ '()]))
         (define meths (trawl-for-methods #'body))
-        (for ([meth meths])
-          (pretty-print (syntax->datum meth))
-          (define method-name (syntax-property meth 'tr:class:method))
-          (define self-type (make-Instance self-class-type))
-          (define method-type
-            (fixup-method-type
-             (car (dict-ref methods method-name))
-             self-type))
-          (define expected (ret method-type))
-          (define annotated (annotate-method meth self-type))
-          (tc-expr/check annotated expected))
+        (with-lexical-env/extend (syntax->list #'(internal-public-names ...))
+                                 ;; FIXME: the types we put here are fine in the expected
+                                 ;;        case, but not if the class doesn't have an annotation.
+                                 ;;        Then we need to hunt down annotations in a first pass.
+                                 ;;        (should probably do this in expected case anyway)
+                                 ;; FIXME: this doesn't work because the names of local methods
+                                 ;;        are obscured and need to be reconstructed somehow
+                                 (map (λ (m) (car (dict-ref methods m)))
+                                      (syntax->datum #'(internal-public-names ...)))
+         (for ([meth meths])
+           (pretty-print (syntax->datum meth))
+           (define method-name (syntax-property meth 'tr:class:method))
+           (define self-type (make-Instance self-class-type))
+           (define method-type
+             (fixup-method-type
+              (car (dict-ref methods method-name))
+              self-type))
+           (define expected (ret method-type))
+           (define annotated (annotate-method meth self-type))
+           (tc-expr/check annotated expected)))
         ;; trawl the body for top-level expressions too
         ])]))
 
