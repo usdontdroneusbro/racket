@@ -92,6 +92,11 @@
             #:with internal-id #'mren.internal-id
             #:with external-id #'mren.external-id))
 
+ (define-syntax-class field-decl
+   (pattern (mren:maybe-renamed default-value:expr)
+            #:with internal-id #'mren.internal-id
+            #:with external-id #'mren.external-id))
+
  (define-syntax-class renamed
    (pattern (internal-id:id external-id:id)))
 
@@ -114,6 +119,9 @@
             #:attr data
             (clause #'form #'clause-name
                     (stx->list #'(names.external-id ...))))
+   (pattern (~and ((~literal field) names:field-decl ...) form)
+            #:attr data (clause #'form #'field
+                                (stx->list #'(names.external-id ...))))
    (pattern (~and ((~and clause-name (~or (~literal inherit-field)
                                           (~literal public)
                                           (~literal pubment)
@@ -209,9 +217,6 @@
      (define expanded-stx (stx-map class-expand #'(e ...)))
      (define flattened-stx
        (flatten (map (eliminate-begin class-expand) expanded-stx)))
-     ;; DEBUG:
-     (pretty-print (map syntax->datum expanded-stx))
-     (pretty-print (map syntax->datum flattened-stx))
      (syntax-parse flattened-stx
        [(class-elems:class-clause-or-other ...)
         (define-values (clauses others)
@@ -245,6 +250,8 @@
                  ;;        so that it's easier to deal with
                  #`(class:-internal
                     (init #,@(dict-ref name-dict #'init '()))
+                    (init-field #,@(dict-ref name-dict #'init-field '()))
+                    (field #,@(dict-ref name-dict #'field '()))
                     (public #,@(dict-ref name-dict #'public '()))))
               (class #,annotated-super
                 #,@(map clause-stx clauses)

@@ -17,6 +17,7 @@
          (utils tc-utils)
          (rep type-rep)
          (for-template racket/base
+                       racket/class
                        (base-env class-prims)))
 
 (import tc-if^ tc-lambda^ tc-app^ tc-let^ tc-expr^)
@@ -37,7 +38,8 @@
     [(tc-result1: (and self-class-type (Class: _ inits fields methods)))
      (syntax-parse form
        #:literals (let-values #%plain-lambda quote-syntax begin
-                   #%plain-app values class:-internal letrec-syntaxes+values)
+                   #%plain-app values class:-internal letrec-syntaxes+values
+                   init init-field field public)
        ;; Inspect the expansion of the class macro for the pieces that
        ;; we need to type-check like superclass, methods, top-level
        ;; expressions and so on
@@ -50,6 +52,8 @@
                                       (quote-syntax
                                        (class:-internal
                                         (init internal-init-names ...)
+                                        (init-field internal-init-field-names ...)
+                                        (field internal-field-names ...)
                                         (public internal-public-names ...)))
                                       (#%plain-app values))))
                                   (let-values (((superclass) superclass-expr)
@@ -76,27 +80,27 @@
                             #:stx #'superclass-expr)
              ;; FIXME: is this the right thing to do?
              (values null null null)]))
-        ;; Use the internal class: information to do some basic checks
-        (define (missing-name? this super required)
-          (ormap (λ (m) (and (not (or (member m super)
-                                      (member m this)))
-                             m))
-                 required))
-        (define (check-names this super required msg)
-          (define missing?
-            (missing-name? this super required))
-          (when missing?
-            ;; FIXME: make this a delayed error? Do it for every single
-            ;;        name separately?
-            (tc-error/expr "class definition missing ~a ~a" msg missing?)))
-        (check-names (syntax->datum #'(internal-init-names ...))
-                     (dict-keys super-inits)
-                     (dict-keys inits)
-                     "initialization argument")
-        (check-names (syntax->datum #'(internal-public-names ...))
-                     (dict-keys super-methods)
-                     (dict-keys methods)
-                     "public method")
+        ;; Use the internal class: information to check whether clauses
+        ;; exist or are absent appropriately
+        (check-exists (append (syntax->datum #'(internal-init-names ...))
+                              (dict-keys super-inits))
+                      (dict-keys inits)
+                      "initialization argument")
+        (check-exists (append (syntax->datum #'(internal-public-names ...))
+                              (dict-keys super-methods)) 
+                      (dict-keys methods)
+                      "public method")
+        (check-exists (append (syntax->datum #'(internal-field-names ...))
+                              (syntax->datum #'(internal-init-field-names ...))
+                              (dict-keys super-fields))
+                      (dict-keys fields)
+                      "public field")
+        (check-absent (dict-keys super-fields)
+                      (syntax->datum #'(internal-field-names ...))
+                      "public field")
+        (check-absent (dict-keys super-methods)
+                      (syntax->datum #'(internal-public-names ...))
+                      "public method")
         ;; trawl the body and find methods and type-check them
         (define (trawl-for-methods form)
           (syntax-parse form
@@ -169,6 +173,28 @@
                        body ...)])
          m)]
     [_ (tc-error "annotate-method: internal error")]))
+
+;; Listof<Symbol> Listof<Symbol> String -> Void
+;; check that all the required names are actually present
+(define (check-exists actual required msg)
+  (define missing
+    (ormap (λ (m) (and (not (member m actual)) m))
+           required))
+  (when missing
+    ;; FIXME: make this a delayed error? Do it for every single
+    ;;        name separately?
+    (tc-error/expr "class definition missing ~a ~a" msg missing)))
+
+;; Listof<Symbol> Listof<Symbol> String -> Void
+;; check that names are absent when they should be
+(define (check-absent actual should-be-absent msg)
+  (define present
+    (ormap (λ (m) (and (member m actual) m))
+           should-be-absent))
+  (printf "present : ~a actual: ~a absent: ~a~n" present actual should-be-absent)
+  (when present
+    (tc-error/expr "superclass defines conflicting ~a ~a"
+                   msg present)))
 
 ;; I wish I could write this
 #;
