@@ -11,6 +11,7 @@
          "tc-metafunctions.rkt"
          "tc-funapp.rkt"
          "tc-subst.rkt"
+         (private type-annotation)
          (types utils abbrev union subtype resolve)
          (utils tc-utils)
          (rep type-rep)
@@ -32,7 +33,7 @@
 ;;  class produced by class: due to the syntax property
 (define (check-class form expected)
   (match expected
-    [(tc-result1: (Class: _ inits fields methods))
+    [(tc-result1: (and self-class-type (Class: _ inits fields methods)))
      (syntax-parse form
        #:literals (let-values #%plain-lambda quote-syntax begin
                    #%plain-app values class:-internal letrec-syntaxes+values)
@@ -119,24 +120,45 @@
         (for ([meth meths])
           (pretty-print (syntax->datum meth))
           (define method-name (syntax-property meth 'tr:class:method))
+          (define self-type (make-Instance self-class-type))
           (define method-type
-            (fixup-method-type (car (dict-ref methods method-name))))
+            (fixup-method-type
+             (car (dict-ref methods method-name))
+             self-type))
           (define expected (ret method-type))
-          (tc-expr/check meth expected))
+          (define annotated (annotate-method meth self-type))
+          (tc-expr/check annotated expected))
         ;; trawl the body for top-level expressions too
         ])]))
 
-;; fixup-method-type : Function -> Function
+;; fixup-method-type : Function Type -> Function
 ;; Fix up a method's arity from a regular function type
-(define (fixup-method-type type)
+(define (fixup-method-type type self-type)
   (match type
     [(Function: (list arrs ...))
      (define fixed-arrs
        (for/list ([arr arrs])
          (match-define (arr: doms rng rest drest kws) arr)
-         (make-arr (cons (make-Univ) doms) rng rest drest kws)))
+         (make-arr (cons self-type doms) rng rest drest kws)))
      (make-Function fixed-arrs)]
     [_ (tc-error "fixup-method-type: internal error")]))
+
+;; annotate-method : Syntax Type -> Syntax
+;; Adds a self type annotation for the first argument
+(define (annotate-method stx self-type)
+  (syntax-parse stx
+    #:literals (let-values #%plain-lambda)
+    [(let-values ([(meth-name:id)
+                   (#%plain-lambda (self-param:id id:id ...)
+                     body ...)])
+       m)
+     (define annotated-self-param
+       (syntax-property #'self-param type-ascrip-symbol self-type))
+     #`(let-values ([(meth-name)
+                     (#%plain-lambda (#,annotated-self-param id ...)
+                       body ...)])
+         m)]
+    [_ (tc-error "annotate-method: internal error")]))
 
 ;; I wish I could write this
 #;
