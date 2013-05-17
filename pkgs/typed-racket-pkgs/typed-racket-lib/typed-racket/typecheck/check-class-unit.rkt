@@ -6,6 +6,7 @@
          racket/dict
          racket/match
          racket/pretty ;; DEBUG ONLY
+         racket/set
          syntax/parse
          "signatures.rkt"
          "tc-metafunctions.rkt"
@@ -80,27 +81,36 @@
                             #:stx #'superclass-expr)
              ;; FIXME: is this the right thing to do?
              (values null null null)]))
+        ;; Define sets of names for use later
+        (define super-init-names (list->set (dict-keys super-inits)))
+        (define super-field-names (list->set (dict-keys super-fields)))
+        (define super-method-names (list->set (dict-keys super-methods)))
+        (define exp-init-names (list->set (dict-keys inits)))
+        (define exp-field-names (list->set (dict-keys fields)))
+        (define exp-method-names (list->set (dict-keys methods)))
+        (define this%-init-names
+          (list->set
+           (append (syntax->datum #'(internal-init-names ...))
+                   (syntax->datum #'(internal-init-field-names ...)))))
+        (define this%-field-names
+          (list->set
+           (append (syntax->datum #'(internal-field-names ...))
+                   (syntax->datum #'(internal-init-field-names ...)))))
+        (define this%-method-names
+          (list->set (syntax->datum #'(internal-public-names ...))))
         ;; Use the internal class: information to check whether clauses
         ;; exist or are absent appropriately
-        (check-exists (append (syntax->datum #'(internal-init-names ...))
-                              (dict-keys super-inits))
-                      (dict-keys inits)
+        (check-exists (set-union this%-init-names super-init-names)
+                      exp-init-names
                       "initialization argument")
-        (check-exists (append (syntax->datum #'(internal-public-names ...))
-                              (dict-keys super-methods)) 
-                      (dict-keys methods)
+        (check-exists (set-union this%-method-names super-method-names)
+                      exp-method-names
                       "public method")
-        (check-exists (append (syntax->datum #'(internal-field-names ...))
-                              (syntax->datum #'(internal-init-field-names ...))
-                              (dict-keys super-fields))
-                      (dict-keys fields)
+        (check-exists (set-union this%-field-names super-field-names)
+                      exp-field-names
                       "public field")
-        (check-absent (dict-keys super-fields)
-                      (syntax->datum #'(internal-field-names ...))
-                      "public field")
-        (check-absent (dict-keys super-methods)
-                      (syntax->datum #'(internal-public-names ...))
-                      "public method")
+        (check-absent super-field-names this%-field-names "public field")
+        (check-absent super-method-names this%-method-names "public method")
         ;; trawl the body and find methods and type-check them
         (define (trawl-for-methods form)
           (syntax-parse form
@@ -174,24 +184,23 @@
          m)]
     [_ (tc-error "annotate-method: internal error")]))
 
-;; Listof<Symbol> Listof<Symbol> String -> Void
+;; Set<Symbol> Set<Symbol> String -> Void
 ;; check that all the required names are actually present
 (define (check-exists actual required msg)
   (define missing
-    (ormap (λ (m) (and (not (member m actual)) m))
-           required))
+    (for/or ([m (in-set required)])
+      (and (not (set-member? actual m)) m)))
   (when missing
     ;; FIXME: make this a delayed error? Do it for every single
     ;;        name separately?
     (tc-error/expr "class definition missing ~a ~a" msg missing)))
 
-;; Listof<Symbol> Listof<Symbol> String -> Void
+;; Set<Symbol> Set<Symbol> String -> Void
 ;; check that names are absent when they should be
 (define (check-absent actual should-be-absent msg)
   (define present
-    (ormap (λ (m) (and (member m actual) m))
-           should-be-absent))
-  (printf "present : ~a actual: ~a absent: ~a~n" present actual should-be-absent)
+    (for/or ([m (in-set should-be-absent)])
+      (and (set-member? actual m) m)))
   (when present
     (tc-error/expr "superclass defines conflicting ~a ~a"
                    msg present)))
