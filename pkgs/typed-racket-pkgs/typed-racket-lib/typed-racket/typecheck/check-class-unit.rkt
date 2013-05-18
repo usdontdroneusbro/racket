@@ -166,7 +166,7 @@
            (car (dict-ref methods method-name))
            self-type))
         (define expected (ret method-type))
-        (define annotated (annotate-method meth self-type))
+        (define annotated (annotate-method meth self-type method-type))
         (tc-expr/check annotated expected)))
      ;; trawl the body for top-level expressions too
      (define top-level-exprs (trawl-for-property #'body 'tr:class:top-level))
@@ -212,8 +212,9 @@
     [_ (tc-error "fixup-method-type: internal error")]))
 
 ;; annotate-method : Syntax Type -> Syntax
-;; Adds a self type annotation for the first argument
-(define (annotate-method stx self-type)
+;; Adds a self type annotation for the first argument and annotated
+;; the let-values binding for tc-expr
+(define (annotate-method stx self-type method-type)
   (syntax-parse stx
     #:literals (let-values #%plain-lambda)
     [(let-values ([(meth-name:id)
@@ -222,7 +223,7 @@
        m)
      (define annotated-self-param
        (syntax-property #'self-param type-ascrip-symbol self-type))
-     #`(let-values ([(meth-name)
+     #`(let-values ([(#,(syntax-property #'meth-name 'type-label method-type))
                      (#%plain-lambda (#,annotated-self-param id ...)
                        body ...)])
          m)]
