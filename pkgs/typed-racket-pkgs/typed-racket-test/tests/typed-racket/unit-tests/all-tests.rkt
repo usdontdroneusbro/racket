@@ -16,6 +16,8 @@
  "module-tests.rkt" ;; pass
  "contract-tests.rkt"
 
+ "class-tests.rkt"
+
  racket/runtime-path
  rackunit rackunit/text-ui)
 
@@ -40,6 +42,7 @@
                   fv-tests
                   contract-tests
                   keyword-tests
+                  class-tests
                   ;; this uses dynamic require because the file fails to compile when there's a test failure
                   (λ () ((dynamic-require special 'typecheck-special-tests))))])
      (f))))
