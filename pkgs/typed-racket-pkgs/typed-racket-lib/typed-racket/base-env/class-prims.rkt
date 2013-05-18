@@ -241,7 +241,6 @@
               [_ other])))
         (define annotated-super
           (syntax-property #'super 'tr:class:super #t))
-        ;; FIXME: should also expand into residual data
         (syntax-property
          (syntax-property
           #`(let-values ()
@@ -255,7 +254,25 @@
                     (public #,@(dict-ref name-dict #'public '()))))
               (class #,annotated-super
                 #,@(map clause-stx clauses)
-                #,@(map non-clause-stx annotated-others)))
+                #,@(map non-clause-stx annotated-others)
+                #,(make-locals-table name-dict)))
           'tr:class #t)
          'typechecker:ignore #t)])]))
+
+(begin-for-syntax
+  ;; This is a neat/horrible trick
+  ;;
+  ;; In order to detect the mappings that class-internal.rkt has
+  ;; created for class-local field and method access, we construct
+  ;; a in-syntax table mapping original names to the accessors.
+  ;; The identifiers inside the lambdas below will expand via
+  ;; set!-transformers to the appropriate accessors, which lets
+  ;; us figure out the accessor identifiers.
+  (define (make-locals-table name-dict)
+   (syntax-property
+    #`(let-values ([(#,@(dict-ref name-dict #'public '()))
+                    (values #,@(map (λ (stx) #`(λ () (#,stx)))
+                                    (dict-ref name-dict #'public '())))])
+        (void))
+    'tr:class:local-table #t)))
 

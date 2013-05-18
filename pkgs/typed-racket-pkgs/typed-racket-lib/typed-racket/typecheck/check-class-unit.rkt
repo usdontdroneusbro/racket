@@ -66,6 +66,8 @@
                                                                          ...)
                                                               body))
                                             ????))))
+        ;; Type for self in method calls
+        (define self-type (make-Instance self-class-type))
         ;; Make sure the superclass is a class
         ;; FIXME: maybe should check the property on this expression
         ;;        as a sanity check too
@@ -113,46 +115,45 @@
         (check-absent super-method-names this%-method-names "public method")
         ;; FIXME: the control flow for the failure of these checks is
         ;;        still up in the air
-        #;
+        #|
         (check-no-extra (set-union this%-field-names super-field-names)
                         exp-field-names)
-        #;
         (check-no-extra (set-union this%-method-names super-method-names)
                         exp-method-names)
+        |#
+        ;; trawl the body for the local name table
+        (define locals (trawl-for-property #'body 'tr:class:local-table))
+        (define local-table
+         (syntax-parse (car locals)
+           #:literals (let-values #%plain-app #%plain-lambda)
+           [(let-values ([(method ...)
+                          (#%plain-app
+                           values
+                           (#%plain-lambda ()
+                             (#%plain-app (#%plain-app local-method self1) self2))
+                           ...)])
+               (#%plain-app void))
+             (map cons
+                 (syntax->datum #'(method ...))
+                 (syntax->list #'(local-method ...)))]))
+        (pretty-print (syntax->datum (car locals)))
         ;; trawl the body and find methods and type-check them
-        (define (trawl-for-methods form)
-          (syntax-parse form
-            #:literals (let-values letrec-values #%plain-app
-                        letrec-syntaxes+values)
-            [stx
-             #:when (syntax-property form 'tr:class:method)
-             (list form)]
-            [(let-values (b ...)
-               body)
-             (trawl-for-methods #'body)]
-            [(letrec-values (b ...)
-               body)
-             (trawl-for-methods #'body)]
-            [(letrec-syntaxes+values (sb ...) (vb ...)
-               body)
-             (trawl-for-methods #'body)]
-            [(#%plain-app e ...)
-             (apply append (map trawl-for-methods (syntax->list #'(e ...))))]
-            [_ '()]))
-        (define meths (trawl-for-methods #'body))
-        (with-lexical-env/extend (syntax->list #'(internal-public-names ...))
+        (define meths (trawl-for-property #'body 'tr:class:method))
+        (with-lexical-env/extend (map (λ (m) (dict-ref local-table m))
+                                      (syntax->datum #'(internal-public-names ...)))
                                  ;; FIXME: the types we put here are fine in the expected
                                  ;;        case, but not if the class doesn't have an annotation.
                                  ;;        Then we need to hunt down annotations in a first pass.
                                  ;;        (should probably do this in expected case anyway)
                                  ;; FIXME: this doesn't work because the names of local methods
                                  ;;        are obscured and need to be reconstructed somehow
-                                 (map (λ (m) (car (dict-ref methods m)))
+                                 (map (λ (m) (->* (list (make-Univ))
+                                                  (fixup-method-type (car (dict-ref methods m))
+                                                                     self-type)))
                                       (syntax->datum #'(internal-public-names ...)))
          (for ([meth meths])
            (pretty-print (syntax->datum meth))
            (define method-name (syntax-property meth 'tr:class:method))
-           (define self-type (make-Instance self-class-type))
            (define method-type
              (fixup-method-type
               (car (dict-ref methods method-name))
@@ -162,6 +163,33 @@
            (tc-expr/check annotated expected)))
         ;; trawl the body for top-level expressions too
         ])]))
+
+;; Syntax -> Listof<Syntax>
+;; Look through the expansion of the class macro in search for
+;; syntax with some property (e.g., methods)
+(define (trawl-for-property form prop)
+  (syntax-parse form
+    #:literals (let-values letrec-values #%plain-app
+                           letrec-syntaxes+values)
+    [stx
+     #:when (syntax-property form prop)
+     (list form)]
+    [(let-values (b ...)
+       body)
+     (trawl-for-property #'body prop)]
+    [(letrec-values (b ...)
+                    body)
+     (trawl-for-property #'body prop)]
+    [(letrec-syntaxes+values (sb ...) (vb ...)
+                             body)
+     (trawl-for-property #'body prop)]
+    [(#%plain-app e ...)
+     (apply append (map (λ (stx) (trawl-for-property stx prop))
+                        (syntax->list #'(e ...))))]
+    [(#%plain-lambda (x ...) e ...)
+     (apply append (map (λ (stx) (trawl-for-property stx prop))
+                        (syntax->list #'(e ...))))]
+    [_ '()]))
 
 ;; fixup-method-type : Function Type -> Function
 ;; Fix up a method's arity from a regular function type
