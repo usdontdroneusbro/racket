@@ -144,32 +144,32 @@
 
    ;;; Classes
    [(Class) (make-Class #f null null null)]
-   [(Class (init [x : Number] [y : Number]))
+   [(Class (init [x Number] [y Number]))
     (make-Class #f `((x ,-Number #f) (y ,-Number #f)) null null)]
-   [(Class (init [x : Number] [y : Number #:optional?]))
+   [(Class (init [x Number] [y Number #:optional]))
     (make-Class #f `((x ,-Number #f) (y ,-Number #t)) null null)]
-   [(Class (init [x : Number]) (init-field [y : Number]))
+   [(Class (init [x Number]) (init-field [y Number]))
     (make-Class #f `((x ,-Number #f) (y ,-Number #f)) `((y ,-Number))
                 null)]
-   [(Class [m : (Number -> Number)])
+   [(Class [m (Number -> Number)])
     (make-Class #f null null `((m ,(t:-> N N))))]
-   [(Class [m : (Number -> Number)] (init [x : Number]))
+   [(Class [m (Number -> Number)] (init [x Number]))
     (make-Class #f `((x ,-Number #f)) null `((m ,(t:-> N N))))]
-   [(Class [m : (Number -> Number)] (field [x : Number]))
+   [(Class [m (Number -> Number)] (field [x Number]))
     (make-Class #f null `((x ,-Number)) `((m ,(t:-> N N))))]
    [FAIL (Class foobar)]
-   [FAIL (Class [x : UNBOUND])]
-   [FAIL (Class [x : Number #:random-keyword])]
-   [FAIL (Class (random-clause [x : Number]))]
+   [FAIL (Class [x UNBOUND])]
+   [FAIL (Class [x Number #:random-keyword])]
+   [FAIL (Class (random-clause [x Number]))]
    ;; test duplicates
-   [FAIL (Class [x : Number] [x : Number])]
-   [FAIL (Class (init [x : Number]) (init [x : Number]))]
-   [FAIL (Class (init [x : Number]) (init-field [x : Number]))]
-   [FAIL (Class (field [x : Number]) (init-field [x : Number]))]
+   [FAIL (Class [x Number] [x Number])]
+   [FAIL (Class (init [x Number]) (init [x Number]))]
+   [FAIL (Class (init [x Number]) (init-field [x Number]))]
+   [FAIL (Class (field [x Number]) (init-field [x Number]))]
    ;; test #:extends
-   [(Class #:extends (Class [m : (Number -> Number)]) (field [x : Number]))
+   [(Class #:extends (Class [m (Number -> Number)]) (field [x Number]))
     (make-Class #f null `((x ,-Number)) `((m ,(t:-> N N))))]
-   [FAIL (Class #:extends (Class [m : (Number -> Number)]) [m : String])]))
+   [FAIL (Class #:extends (Class [m (Number -> Number)]) [m String])]))
 
 ;; FIXME - add tests for parse-values-type, parse-tc-results
 
