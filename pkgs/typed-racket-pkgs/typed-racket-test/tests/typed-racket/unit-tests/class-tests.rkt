@@ -328,7 +328,7 @@
    (check-ok
     (define c% (class: object% (super-new)
                  (define/public (m) 0)))
-    (send c% m))
+    (send (new c%) m))
 
    ;; test fields without expected class type
    (check-ok
