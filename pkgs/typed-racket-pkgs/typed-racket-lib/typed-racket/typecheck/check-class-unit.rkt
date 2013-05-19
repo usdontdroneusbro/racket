@@ -187,13 +187,13 @@
 (define (merge-types self-type method-types)
   (match-define (Instance: (and class-type (Class: #f inits fields methods)))
                 self-type)
-  ;; sanity check
-  (unless (set-empty? (set-intersect (list->set (dict-keys methods))
-                                     (list->set (dict-keys method-types))))
-    (tc-error "merge-types: internal error"))
   (define new-methods
     (for/fold ([methods methods])
               ([(name type) (in-dict method-types)])
+      (define old-type (dict-ref methods name #f))
+      ;; sanity check
+      (when (and old-type (not (equal? old-type type)))
+        (tc-error "merge-types: internal error"))
       (dict-set methods name type)))
   (make-Class #f inits fields new-methods))
 
@@ -225,15 +225,15 @@
       (->* (list (make-Univ))
            (if maybe-type
                (fixup-method-type (car maybe-type) self-type)
-               (->* (list (make-Univ)) (make-Univ))))))
+               (make-Univ)))))
   (define field-get-types
     (for/list ([f (set->list field-names)])
-      (define maybe-type (dict-ref fields f))
+      (define maybe-type (dict-ref fields f #f))
       (->* (list (make-Univ)) (or (and maybe-type (car maybe-type))
                                   (make-Univ)))))
   (define field-set-types
     (for/list ([f (set->list field-names)])
-      (define maybe-type (dict-ref fields f))
+      (define maybe-type (dict-ref fields f #f))
       (->* (list (make-Univ) (or (and maybe-type
                                       (car maybe-type))
                                  -bot))
@@ -249,12 +249,13 @@
     (define method-name (syntax-property meth 'tr:class:method))
     (define maybe-expected (dict-ref methods method-name #f))
     (cond [maybe-expected
+           (define pre-method-type (car maybe-expected))
            (define method-type
-             (fixup-method-type (car maybe-expected) self-type))
+             (fixup-method-type pre-method-type self-type))
            (define expected (ret method-type))
            (define annotated (annotate-method meth self-type method-type))
            (tc-expr/check annotated expected)
-           (list method-name method-type)]
+           (list method-name pre-method-type)]
           [else (list method-name
                       (unfixup-method-type (tc-expr/t meth)))])))
 
