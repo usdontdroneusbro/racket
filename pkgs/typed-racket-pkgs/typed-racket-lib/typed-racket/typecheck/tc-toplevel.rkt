@@ -202,6 +202,12 @@
   (parameterize ([current-orig-stx form])
     (kernel-syntax-case* form #f (define-type-alias-internal define-typed-struct-internal define-type-internal
                                    require/typed-internal values module module*)
+      ;; need to special case this
+      ;; FIXME: is there a better way?
+      [stx
+       (syntax-property form 'tr:class)
+       (tc-expr #'stx)]
+
       ;; these forms we have been instructed to ignore
       [stx
        (ignore-property form)
