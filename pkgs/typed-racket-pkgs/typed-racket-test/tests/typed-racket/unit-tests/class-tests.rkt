@@ -323,6 +323,13 @@
                    0)))
     (send (new c%) m 5))
 
+   ;; test type-checking for classes without any
+   ;; internal type annotations on methods
+   (check-ok
+    (define c% (class: object% (super-new)
+                 (define/public (m) 0)))
+    (send c% m))
+
    ;; test fields without expected class type
    (check-ok
     (define c% (class: object% (super-new)

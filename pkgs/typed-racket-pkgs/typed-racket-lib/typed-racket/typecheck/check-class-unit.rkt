@@ -185,10 +185,17 @@
 ;; new information found from type-checking. Only used when an expected
 ;; type was not provided.
 (define (merge-types self-type method-types)
-  (match-define (Instance: (and class-type (Class: _ _ _ _)))
+  (match-define (Instance: (and class-type (Class: #f inits fields methods)))
                 self-type)
-  ;; FIXME: this is an incorrect stub implementation
-  class-type)
+  ;; sanity check
+  (unless (set-empty? (set-intersect (list->set (dict-keys methods))
+                                     (list->set (dict-keys method-types))))
+    (tc-error "merge-types: internal error"))
+  (define new-methods
+    (for/fold ([methods methods])
+              ([(name type) (in-dict method-types)])
+      (dict-set methods name type)))
+  (make-Class #f inits fields new-methods))
 
 ;; local-tables->lexical-env : Dict<Symbol, Id> Dict List<Symbol>
 ;;                             Dict<Symbol, (List Id Id)> Dict List<Symbol>
@@ -238,7 +245,7 @@
 ;; check-methods : Listof<Syntax> Dict Type -> Dict<Symbol, Type>
 ;; Type-check the methods inside of a class
 (define (check-methods meths methods self-type)
-  (for ([meth meths])
+  (for/list ([meth meths])
     (define method-name (syntax-property meth 'tr:class:method))
     (define maybe-expected (dict-ref methods method-name #f))
     (cond [maybe-expected
@@ -248,7 +255,8 @@
            (define annotated (annotate-method meth self-type method-type))
            (tc-expr/check annotated expected)
            (list method-name method-type)]
-          [else (list method-name (tc-expr/t meth))])))
+          [else (list method-name
+                      (unfixup-method-type (tc-expr/t meth)))])))
 
 ;; Syntax -> Dict<Symbol, Id> Dict<Symbol, (List Symbol Symbol)>
 ;; Construct tables mapping internal method names to the accessors
@@ -385,6 +393,19 @@
        (for/list ([arr arrs])
          (match-define (arr: doms rng rest drest kws) arr)
          (make-arr (cons self-type doms) rng rest drest kws)))
+     (make-Function fixed-arrs)]
+    [_ (tc-error "fixup-method-type: internal error")]))
+
+;; unfixup-method-type : Function -> Function
+;; Turn a "real" method type back into a function type
+;; FIXME: this is a really badly named function
+(define (unfixup-method-type type)
+  (match type
+    [(Function: (list arrs ...))
+     (define fixed-arrs
+       (for/list ([arr arrs])
+         (match-define (arr: doms rng rest drest kws) arr)
+         (make-arr (cdr doms) rng rest drest kws)))
      (make-Function fixed-arrs)]
     [_ (tc-error "fixup-method-type: internal error")]))
 
