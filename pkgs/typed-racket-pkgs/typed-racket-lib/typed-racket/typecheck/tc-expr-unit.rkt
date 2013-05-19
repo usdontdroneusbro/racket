@@ -183,9 +183,6 @@
       [stx
        ;; a class: generated class
        #:when (syntax-property form 'tr:class)
-       ;; use internal TR forms to hide information obtained
-       ;; at the class: level so that inits, fields, and method
-       ;; presence/absence can be checked immediately here
        (check-class form expected)
        expected]
       [stx
@@ -325,7 +322,9 @@
     (syntax-parse form
       #:literal-sets (kernel-literals)
       #:literals (#%app lambda find-method/who)
-      ;;
+      [stx
+       #:when (syntax-property form 'tr:class)
+       (ret (check-class form #f))]
       [stx
        #:when (with-handlers-property form)
        (let ([ty (check-subforms/with-handlers form)])
