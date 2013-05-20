@@ -28,6 +28,36 @@
 (import tc-if^ tc-lambda^ tc-app^ tc-let^ tc-expr^)
 (export check-class^)
 
+;; Syntax classes for use in functions below
+(define-syntax-class name-pair
+  (pattern (internal:id external:id)))
+
+(define-syntax-class internal-class-data
+  #:literals (#%plain-app quote-syntax class:-internal begin
+              values c:init c:init-field c:field
+              c:public c:override c:private)
+  (pattern (begin (quote-syntax
+                   (class:-internal
+                    (c:init init-names:name-pair ...)
+                    (c:init-field init-field-names:name-pair ...)
+                    (c:field field-names:name-pair ...)
+                    (c:public public-names:name-pair ...)
+                    (c:override override-names:name-pair ...)
+                    (c:private private-names:name-pair ...)))
+                  (#%plain-app values))
+           #:with init-internals #'(init-names.internal ...)
+           #:with init-externals #'(init-names.external ...)
+           #:with init-field-internals #'(init-field-names.internal ...)
+           #:with init-field-externals #'(init-field-names.external ...)
+           #:with field-internals #'(field-names.internal ...)
+           #:with field-externals #'(field-names.external ...)
+           #:with public-internals #'(public-names.internal ...)
+           #:with public-externals #'(public-names.external ...)
+           #:with override-internals #'(override-names.internal ...)
+           #:with override-externals #'(override-names.external ...)
+           #:with private-internals #'(private-names.internal ...)
+           #:with private-externals #'(private-names.external ...)))
+
 ;; Syntax TCResults -> Type
 ;; Type-check a class form by trawling its innards
 ;;
@@ -48,10 +78,8 @@
 ;; Do the actual type-checking
 (define (do-check form expected? self-class-type)
   (syntax-parse form
-    #:literals (let-values #%plain-lambda quote-syntax begin
-                #%plain-app values class:-internal letrec-syntaxes+values
-                c:init c:init-field c:field c:public c:override
-                c:private)
+    #:literals (let-values #%plain-lambda begin
+                #%plain-app values letrec-syntaxes+values)
     ;; Inspect the expansion of the class macro for the pieces that
     ;; we need to type-check like superclass, methods, top-level
     ;; expressions and so on
@@ -59,17 +87,7 @@
        (letrec-syntaxes+values ()
                                ((()
                                  ;; residual class: data
-                                 ;; FIXME: put in syntax class
-                                 (begin
-                                   (quote-syntax
-                                    (class:-internal
-                                     (c:init internal-init-names ...)
-                                     (c:init-field internal-init-field-names ...)
-                                     (c:field internal-field-names ...)
-                                     (c:public internal-public-names ...)
-                                     (c:override internal-override-names ...)
-                                     (c:private internal-private-names ...)))
-                                   (#%plain-app values))))
+                                 data:internal-class-data))
                                (let-values (((superclass) superclass-expr)
                                             ((interfaces) interface-expr))
                                  (?#%app compose-class
@@ -100,24 +118,24 @@
      (define super-method-names (list->set (dict-keys super-methods)))
      (define this%-init-names
        (list->set
-        (append (syntax->datum #'(internal-init-names ...))
-                (syntax->datum #'(internal-init-field-names ...)))))
+        (append (syntax->datum #'data.init-externals)
+                (syntax->datum #'data.init-field-externals))))
      (define this%-field-names
        (list->set
-        (append (syntax->datum #'(internal-field-names ...))
-                (syntax->datum #'(internal-init-field-names ...)))))
+        (append (syntax->datum #'data.field-externals)
+                (syntax->datum #'data.init-field-externals))))
      (define this%-public-names
-       (list->set (syntax->datum #'(internal-public-names ...))))
+       (list->set (syntax->datum #'data.public-externals)))
      (define this%-override-names
-       (list->set (syntax->datum #'(internal-override-names ...))))
+       (list->set (syntax->datum #'data.override-externals)))
      (define this%-private-names
-       (list->set (syntax->datum #'(internal-private-names ...))))
+       (list->set (syntax->datum #'data.private-externals)))
      (define this%-method-names
        (set-union this%-public-names this%-override-names))
      ;; trawl the body for top-level expressions
      (define top-level-exprs (trawl-for-property #'body 'tr:class:top-level))
      (define internals-table
-       (register-internals top-level-exprs #'(internal-public-names ...)))
+       (register-internals top-level-exprs #'data.public-internals))
      ;; Type for self in method calls
      (define self-type
        (if self-class-type
