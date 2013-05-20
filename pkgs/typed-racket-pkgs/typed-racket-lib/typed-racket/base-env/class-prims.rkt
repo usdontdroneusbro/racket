@@ -150,7 +150,7 @@
                   form)
             #:attr data
             (clause #'form #'clause-name
-                    (stx->list #'((names names) ...)))))
+                    (stx->list #'(names ...)))))
 
  (define-syntax-class class-clause-or-other
    (pattern e:class-clause #:attr data (attribute e.data))
