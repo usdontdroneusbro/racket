@@ -1,6 +1,6 @@
 #lang typed/racket/base
 
-(require (only-in typed/mred/mred Bitmap%)
+(require (only-in typed/racket/gui DC<%> Snip% Bitmap% Frame%)
          "../common/types.rkt"
          "../syntax.rkt")
 
@@ -13,7 +13,8 @@
  plot/no-gui
  
  [plot/dc ((Treeof (U renderer2d nonrenderer))
-           Any Real Real Real Real
+           (Instance DC<%>)
+           Real Real Real Real
            [#:x-min (Option Real)]
            [#:x-max (Option Real)]
            [#:y-min (Option Real)]
