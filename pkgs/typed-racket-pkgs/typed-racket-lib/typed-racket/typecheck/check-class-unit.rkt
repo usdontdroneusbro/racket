@@ -223,7 +223,7 @@
      (define meths (trawl-for-property #'body 'tr:class:method))
      (define checked-method-types
        (with-lexical-env/extend lexical-names lexical-types
-         (check-methods meths methods self-type)))
+         (check-methods internal-external-mapping meths methods self-type)))
      (if expected?
          self-class-type
          (merge-types self-type checked-method-types))]))
@@ -290,12 +290,15 @@
                   localized-field-get-names localized-field-set-names)
           (append method-types field-get-types field-set-types)))
 
-;; check-methods : Listof<Syntax> Dict Type -> Dict<Symbol, Type>
+;; check-methods : Listof<Syntax> Dict<Symbol, Symbol> Dict Type
+;;                 -> Dict<Symbol, Type>
 ;; Type-check the methods inside of a class
-(define (check-methods meths methods self-type)
+(define (check-methods internal-external-mapping
+                       meths methods self-type)
   (for/list ([meth meths])
     (define method-name (syntax-property meth 'tr:class:method))
-    (define maybe-expected (dict-ref methods method-name #f))
+    (define external-name (dict-ref internal-external-mapping method-name))
+    (define maybe-expected (dict-ref methods external-name #f))
     (cond [maybe-expected
            (define pre-method-type (car maybe-expected))
            (define method-type
@@ -303,8 +306,8 @@
            (define expected (ret method-type))
            (define annotated (annotate-method meth self-type method-type))
            (tc-expr/check annotated expected)
-           (list method-name pre-method-type)]
-          [else (list method-name
+           (list external-name pre-method-type)]
+          [else (list external-name
                       (unfixup-method-type (tc-expr/t meth)))])))
 
 ;; Syntax -> Dict<Symbol, Id> Dict<Symbol, (List Symbol Symbol)>

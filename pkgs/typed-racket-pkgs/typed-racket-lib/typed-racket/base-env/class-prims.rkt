@@ -87,7 +87,7 @@
  (struct non-clause (stx))
  
  (define-syntax-class init-decl
-   (pattern id
+   (pattern id:id
             #:attr optional? #f
             #:with ids #'(id id))
    (pattern (ren:renamed)
@@ -106,7 +106,7 @@
             #:with ids #'(internal-id external-id)))
 
  (define-syntax-class maybe-renamed
-   (pattern id
+   (pattern id:id
             #:with ids #'(id id))
    (pattern ren:renamed
             #:with ids #'ren.ids))
@@ -279,9 +279,9 @@
         ;; FIXME: this needs to track privates, augments, etc.
         [(define-values (id) . rst)
          #:when (memf (λ (n) (free-identifier=? #'id n))
-                      (append (map stx-car (dict-ref name-dict #'public '()))
-                              (map stx-car (dict-ref name-dict #'override '()))
-                              (map stx-car (dict-ref name-dict #'private '()))))
+                      (append (stx-map stx-car (dict-ref name-dict #'public '()))
+                              (stx-map stx-car (dict-ref name-dict #'override '()))
+                              (dict-ref name-dict #'private '())))
          (values (cons (non-clause (syntax-property stx
                                                     'tr:class:method
                                                     (syntax-e #'id)))
@@ -303,12 +303,12 @@
   ;; us figure out the accessor identifiers.
   (define (make-locals-table name-dict)
     (define method-names
-      (append (map stx-car (dict-ref name-dict #'public '()))
-              (map stx-car (dict-ref name-dict #'override '()))))
+      (append (stx-map stx-car (dict-ref name-dict #'public '()))
+              (stx-map stx-car (dict-ref name-dict #'override '()))))
     (define private-names (dict-ref name-dict #'private '()))
     (define field-names
-      (append (map stx-car (dict-ref name-dict #'field '()))
-              (map stx-car (dict-ref name-dict #'init-field '()))))
+      (append (stx-map stx-car (dict-ref name-dict #'field '()))
+              (stx-map stx-car (dict-ref name-dict #'init-field '()))))
     (syntax-property
      #`(let-values ([(#,@method-names)
                      (values #,@(map (λ (stx) #`(λ () (#,stx)))
