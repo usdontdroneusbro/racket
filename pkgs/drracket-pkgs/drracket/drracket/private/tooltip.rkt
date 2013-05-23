@@ -1,38 +1,89 @@
-#lang racket/base
-(require racket/gui/base
-         racket/class)
+#lang typed/racket
+
+(require typed/racket/gui)
 
 (provide tooltip-frame%)
+
+(define yellow-message%
+  (class canvas%
+    (inherit get-dc refresh get-client-size
+             min-width min-height
+             get-parent)
+    (: labels (Listof String))
+    (define labels '(""))
+    (: set-lab (-> (Listof String) Void))
+    (define/public (set-lab _ls)
+      (unless (equal? labels _ls)
+        (set! labels _ls)
+        (update-size)
+        (refresh)))
+    (: update-size (-> Void))
+    (define/private (update-size)
+      (define dc (get-dc))
+      (send dc set-font small-control-font)
+      (define-values (w h)
+        (for/fold: ([w : Nonnegative-Real 0] [h : Nonnegative-Real 0])
+                   ([lab (in-list labels)])
+          (define-values (this-w this-h _1 _2) (send dc get-text-extent lab))
+          (values (max this-w w)
+                  (max this-h h))))
+      (define parent (get-parent))
+      (when parent
+       (send parent begin-container-sequence)
+       (min-width (+ 5 (exact-ceiling w)))
+       (min-height (+ 5 (* (length labels) (exact-ceiling h))))
+       (send parent end-container-sequence)
+       (send parent reflow-container)))
+    (define/override (on-paint)
+      (define dc (get-dc))
+      (send dc set-font small-control-font)
+      (define-values (w h) (get-client-size))
+      (define-values (tw th _1 _2) (send dc get-text-extent (car labels)))
+      (send dc set-pen "black" 1 'transparent)
+      (send dc set-brush "LemonChiffon" 'solid)
+      (send dc set-pen "black" 1 'solid)
+      (send dc draw-rectangle 0 0 w h)
+      (for ([label (in-list labels)]
+            [i (in-naturals)])
+        (send dc draw-text label 2 (+ 2 (* i th)))))
+    (super-new [stretchable-width #f] [stretchable-height #f])))
 
 (define tooltip-frame%
   (class frame%
     (inherit reflow-container move get-width get-height is-shown?)
     
+    (: frame-to-track (Option (Instance Frame%)))
     (init-field [frame-to-track #f])
+    (: timer (Option (Instance Timer%)))
     (define timer
-      (and frame-to-track
-           (new timer%
-                [notify-callback
-                 (λ ()
-                   (unless (send frame-to-track is-shown?)
-                     (show #f)
-                     (send timer stop)))])))
-                
+      (let ([frame-to-track frame-to-track])
+        (and frame-to-track
+             (new timer%
+                  [notify-callback
+                   (λ ()
+                     (unless (send frame-to-track is-shown?)
+                       (show #f)
+                       (let ([timer timer])
+                         (and timer (send timer stop)))))]))))
     
     (define/override (on-subwindow-event r evt)
       (and (is-shown?)
            (begin (show #f)
                   #t)))
+
+    (: set-tooltip ((Listof String) -> Void))
     (define/public (set-tooltip ls) 
       (send yellow-message set-lab ls))
     
     (define/override (show on?)
-      (when timer
+      (define timer* timer)
+      (when timer*
         (cond
-          [on? (send timer start 200 #f)]
-          [else (send timer stop)]))
+          [on? (send timer* start 200 #f)]
+          [else (send timer* stop)]))
       (super show on?))
     
+    (: show-over (Integer Integer Integer Integer [#:prefer-upper-left? Any] -> Void))
     (define/public (show-over x y w h #:prefer-upper-left? [prefer-upper-left? #f])
       (reflow-container)
       (define mw (get-width))
@@ -54,11 +105,13 @@
           (or (lower-right #t) (upper-left #f) (lower-right #t)))
       (show #t))
     
+    (: try-moving-to (Integer Integer Integer Integer -> Boolean))
     (define/private (try-moving-to x y w h)
-      (and (for/or ([m (in-range 0 (get-display-count))])
+      (and (for/or: : Boolean ([m : Natural (in-range 0 (get-display-count))])
              (define-values (mx my) (get-display-left-top-inset #:monitor m))
              (define-values (mw mh) (get-display-size #:monitor m))
-             (and (<= (- mx) x (+ x w) (+ (- mx) mw))
+             (and mx my mw mh
+                  (<= (- mx) x (+ x w) (+ (- mx) mw))
                   (<= (- my) y (+ y h) (+ (- my) mh))))
            (begin (move x y)
                   #t)))
@@ -67,43 +120,6 @@
                [label ""]
                [stretchable-width #f]
                [stretchable-height #f])
-    (define yellow-message (new yellow-message% [parent this]))))
 
-(define yellow-message%
-  (class canvas%
-    (inherit get-dc refresh get-client-size
-             min-width min-height
-             get-parent)
-    (define labels '(""))
-    (define/public (set-lab _ls) 
-      (unless (equal? labels _ls)
-        (set! labels _ls)
-        (update-size)
-        (refresh)))
-    (define/private (update-size)
-      (define dc (get-dc))
-      (send dc set-font small-control-font)
-      (define-values (w h) 
-        (for/fold ([w 0] [h 0])
-                  ([lab (in-list labels)])
-          (define-values (this-w this-h _1 _2) (send dc get-text-extent lab))
-          (values (max this-w w)
-                  (max this-h h))))
-      (send (get-parent) begin-container-sequence)
-      (min-width (+ 5 (inexact->exact (ceiling w))))
-      (min-height (+ 5 (* (length labels) (inexact->exact (ceiling h)))))
-      (send (get-parent) end-container-sequence)
-      (send (get-parent) reflow-container))
-    (define/override (on-paint)
-      (define dc (get-dc))
-      (send dc set-font small-control-font)
-      (define-values (w h) (get-client-size))
-      (define-values (tw th _1 _2) (send dc get-text-extent (car labels)))
-      (send dc set-pen "black" 1 'transparent)
-      (send dc set-brush "LemonChiffon" 'solid)
-      (send dc set-pen "black" 1 'solid)
-      (send dc draw-rectangle 0 0 w h)
-      (for ([label (in-list labels)]
-            [i (in-naturals)])
-        (send dc draw-text label 2 (+ 2 (* i th)))))
-    (super-new [stretchable-width #f] [stretchable-height #f])))
+    (: yellow-message (Object [set-lab (-> (Listof String) Void)]))
+    (define yellow-message (new yellow-message% [parent this]))))
