@@ -531,7 +531,7 @@
        #:when (free-identifier=? #'obj1 #'obj2)
        (define init-name (syntax-e #'name))
        (define init-type (car (dict-ref inits init-name '(#f))))
-       (cond [init-name
+       (cond [init-type
               (define extract-arg-type
                 (cl->* (->* (list (Un (-val #f) -Symbol) (-val init-name)
                                   (make-Univ) (-val #f)) init-type)
