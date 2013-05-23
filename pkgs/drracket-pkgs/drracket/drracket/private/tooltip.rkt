@@ -1,89 +1,49 @@
-#lang racket/base
-(require racket/gui/base
-         racket/class)
+#lang typed/racket
+
+(require typed/racket/gui)
 
 (provide tooltip-frame%)
 
-(define tooltip-frame%
-  (class frame%
-    (inherit reflow-container move get-width get-height is-shown?)
-    
-    (init-field [frame-to-track #f])
-    (define timer
-      (and frame-to-track
-           (new timer%
-                [notify-callback
-                 (λ ()
-                   (unless (send frame-to-track is-shown?)
-                     (show #f)
-                     (send timer stop)))])))
-                
-    
-    (define/override (on-subwindow-event r evt)
-      (and (is-shown?)
-           (begin (show #f)
-                  #t)))
-    (define/public (set-tooltip ls) 
-      (send yellow-message set-lab ls))
-    
-    (define/override (show on?)
-      (when timer
-        (cond
-          [on? (send timer start 200 #f)]
-          [else (send timer stop)]))
-      (super show on?))
-    
-    (define/public (show-over x y w h #:prefer-upper-left? [prefer-upper-left? #f])
-      (reflow-container)
-      (define mw (get-width))
-      (define mh (get-height))
-      (define (upper-left must?) 
-        (define the-x (- x mw))
-        (define the-y (- y mh))
-        (if must?
-            (move the-x the-y)
-            (try-moving-to the-x the-y mw mh)))
-      (define (lower-right must?) 
-        (define the-x (+ x w))
-        (define the-y (+ y h))
-        (if must?
-            (move the-x the-y)
-            (try-moving-to the-x the-y mw mh)))
-      (if prefer-upper-left?
-          (or (upper-left #t) (lower-right #f) (upper-left #t))
-          (or (lower-right #t) (upper-left #f) (lower-right #t)))
-      (show #t))
-    
-    (define/private (try-moving-to x y w h)
-      (and (for/or ([m (in-range 0 (get-display-count))])
-             (define-values (mx my) (get-display-left-top-inset #:monitor m))
-             (define-values (mw mh) (get-display-size #:monitor m))
-             (and (<= (- mx) x (+ x w) (+ (- mx) mw))
-                  (<= (- my) y (+ y h) (+ (- my) mh))))
-           (begin (move x y)
-                  #t)))
+(define-type YellowMessage%
+  (Class #:extends Canvas%-intf
+         (init [parent (Instance Frame%)
+                       ;; there are three more cases, but contracts
+                       ;; don't work the way you'd want here
+                       ]
+               [style (U 'border 'control-border 'combo
+                         'vscroll 'hscroll 'resize-corner
+                         'gl 'no-autoclear 'transparent
+                         'no-focus 'deleted)
+                      #:optional]
+               [paint-callback (Any (Instance DC<%>) -> Any)
+                               #:optional]
+               [label (Option String) #:optional]
+               [gl-config (Option Any) #:optional]
+               [enabled Any #:optional]
+               [vert-margin Natural #:optional]
+               [horiz-margin Natural #:optional]
+               [min-width (Option Natural) #:optional]
+               [min-height (Option Natural) #:optional])
+         (field [labels (Listof String)])
+         [set-lab ((Listof String) -> Void)]))
 
-    (super-new [style '(no-resize-border no-caption float)]
-               [label ""]
-               [stretchable-width #f]
-               [stretchable-height #f])
-    (define yellow-message (new yellow-message% [parent this]))))
-
+(: yellow-message% YellowMessage%)
 (define yellow-message%
-  (class canvas%
+  (class: canvas%
     (inherit get-dc refresh get-client-size
              min-width min-height
              get-parent)
-    (define labels '(""))
-    (define/public (set-lab _ls) 
+    (field [labels '("")])
+    (define/public (set-lab _ls)
       (unless (equal? labels _ls)
         (set! labels _ls)
         (update-size)
         (refresh)))
+    (: update-size (-> Void))
     (define/private (update-size)
       (define dc (get-dc))
       (send dc set-font small-control-font)
-      (define-values (w h) 
+      (define-values (w h)
         (for/fold ([w 0] [h 0])
                   ([lab (in-list labels)])
           (define-values (this-w this-h _1 _2) (send dc get-text-extent lab))
@@ -107,3 +67,80 @@
             [i (in-naturals)])
         (send dc draw-text label 2 (+ 2 (* i th)))))
     (super-new [stretchable-width #f] [stretchable-height #f])))
+
+(define tooltip-frame%
+  (class: frame%
+    (inherit reflow-container move get-width get-height is-shown?)
+    
+    (: frame-to-track (Option (Instance Frame%)))
+    (init-field [frame-to-track #f])
+    (: timer (Option (Instance Timer%)))
+    (field [timer
+            (let ([frame-to-track frame-to-track]
+                  [timer timer])
+              (and frame-to-track
+                   (new timer%
+                        [notify-callback
+                         (λ ()
+                           (unless (send frame-to-track is-shown?)
+                             (show #f)
+                             (and timer (send timer stop))))])))])
+    
+    (define/override (on-subwindow-event r evt)
+      (and (is-shown?)
+           (begin (show #f)
+                  #t)))
+
+    (: set-tooltip ((Listof String) -> Void))
+    (define/public (set-tooltip ls) 
+      (send yellow-message set-lab ls))
+    
+    (define/override (show on?)
+      (define timer* timer)
+      (when timer*
+        (cond
+          [on? (send timer* start 200 #f)]
+          [else (send timer* stop)]))
+      ;; Need `super` for this
+      #;
+      (super show on?))
+    
+    (: show-over (Integer Integer Integer Integer [#:prefer-upper-left? Any] -> Void))
+    (define/public (show-over x y w h #:prefer-upper-left? [prefer-upper-left? #f])
+      (reflow-container)
+      (define mw (get-width))
+      (define mh (get-height))
+      (define (upper-left must?) 
+        (define the-x (- x mw))
+        (define the-y (- y mh))
+        (if must?
+            (move the-x the-y)
+            (try-moving-to the-x the-y mw mh)))
+      (define (lower-right must?) 
+        (define the-x (+ x w))
+        (define the-y (+ y h))
+        (if must?
+            (move the-x the-y)
+            (try-moving-to the-x the-y mw mh)))
+      (if prefer-upper-left?
+          (or (upper-left #t) (lower-right #f) (upper-left #t))
+          (or (lower-right #t) (upper-left #f) (lower-right #t)))
+      (show #t))
+    
+    (: try-moving-to (Integer Integer Integer Integer -> Boolean))
+    (define/private (try-moving-to x y w h)
+      (and (for/or ([m (in-range 0 (get-display-count))])
+             (define-values (mx my) (get-display-left-top-inset #:monitor m))
+             (define-values (mw mh) (get-display-size #:monitor m))
+             (and (<= (- mx) x (+ x w) (+ (- mx) mw))
+                  (<= (- my) y (+ y h) (+ (- my) mh))))
+           (begin (move x y)
+                  #t)))
+
+    (super-new [style '(no-resize-border no-caption float)]
+               [label ""]
+               [stretchable-width #f]
+               [stretchable-height #f])
+
+    (: yellow-message (Instance YellowMessage%))
+    (field [yellow-message (new yellow-message% [parent this])])))
