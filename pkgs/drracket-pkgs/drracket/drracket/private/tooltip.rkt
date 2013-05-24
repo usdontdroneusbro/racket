@@ -73,15 +73,15 @@
     (init-field [frame-to-track #f])
     (: timer (Option (Instance Timer%)))
     (define timer
-      (let ([frame-to-track frame-to-track]
-            [timer timer])
+      (let ([frame-to-track frame-to-track])
         (and frame-to-track
              (new timer%
                   [notify-callback
                    (λ ()
                      (unless (send frame-to-track is-shown?)
                        (show #f)
-                       (and timer (send timer stop))))]))))
+                       (let ([timer timer])
+                         (and timer (send timer stop)))))]))))
     
     (define/override (on-subwindow-event r evt)
       (and (is-shown?)
@@ -138,5 +138,7 @@
                [stretchable-height #f])
 
     (: yellow-message (Instance YellowMessage%))
-    (field [yellow-message (new yellow-message% [parent this])])))
+    #;
+    (field [yellow-message (new yellow-message% [parent this])])
+    (define yellow-message (new yellow-message% [parent this]))))
 
