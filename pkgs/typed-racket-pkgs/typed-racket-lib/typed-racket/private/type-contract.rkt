@@ -22,7 +22,9 @@
  (for-template racket/base racket/contract racket/set (utils any-wrap)
                (prefix-in t: (types numeric-predicates))
                (only-in unstable/contract sequence/c)
-               (only-in racket/class object% is-a?/c subclass?/c object-contract class/c init object/c class?)))
+               (only-in racket/class object% is-a?/c subclass?/c
+                        object-contract class/c init object/c class?
+                        instanceof/c)))
 
 ;; These check if either the define form or the body form has the syntax
 ;; property. Normally the define form will have the property but lifting an
@@ -432,8 +434,10 @@
                                 #,(contract-kind->keyword
                                    (current-contract-kind)))])
                    n*))))]
+        [(Instance: (? F? t))
+         (t->c t)]
         [(Instance: (? Mu? t))
-         (t->c (make-Instance (resolve-once t)))]
+         #`(instanceof/c #,(t->c t))]
         [(Instance: (Class: _ _ _ (list (list name fcn) ...)))
          (set-impersonator!)
          (with-syntax ([(fcn-cnts ...) (for/list ([f (in-list fcn)]) (t->c/fun f #:method #t))]
