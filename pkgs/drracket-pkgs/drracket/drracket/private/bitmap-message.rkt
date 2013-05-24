@@ -1,20 +1,26 @@
-#lang racket/base
+#lang typed/racket
 
-(require racket/gui/base racket/class)
+(require typed/racket/gui)
 (provide bitmap-message%)
 
 (define bitmap-message%
-  (class canvas%
+  (class: canvas%
     (inherit min-width min-height get-dc refresh)
+    (: bm (Option (Instance Bitmap%)))
     (define bm #f)
     (define/override (on-paint)
-      (when bm
+      (define bm* bm)
+      (when bm*
         (let ([dc (get-dc)])
-          (send dc draw-bitmap bm 0 0))))
+          (send dc draw-bitmap bm* 0 0)))
+      (void))
+    (: set-bm ((Instance Bitmap%) -> Void))
     (define/public (set-bm b)
       (set! bm b)
-      (min-width (send bm get-width))
-      (min-height (send bm get-height))
+      (let ([bm bm])
+        (when bm
+          (min-width (send bm get-width))
+          (min-height (send bm get-height))))
       (refresh))
     (super-new (stretchable-width #f)
                (stretchable-height #f)
