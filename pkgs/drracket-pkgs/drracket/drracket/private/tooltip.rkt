@@ -21,7 +21,6 @@
                [horiz-margin Natural #:optional]
                [min-width (Option Natural) #:optional]
                [min-height (Option Natural) #:optional])
-         (field [labels (Listof String)])
          [set-lab ((Listof String) -> Void)]))
 
 (: yellow-message% YellowMessage%)
@@ -30,7 +29,8 @@
     (inherit get-dc refresh get-client-size
              min-width min-height
              get-parent)
-    (field [labels '("")])
+    (: labels (Listof String))
+    (define labels '(""))
     (define/public (set-lab _ls)
       (unless (equal? labels _ls)
         (set! labels _ls)
@@ -72,16 +72,16 @@
     (: frame-to-track (Option (Instance Frame%)))
     (init-field [frame-to-track #f])
     (: timer (Option (Instance Timer%)))
-    (field [timer
-            (let ([frame-to-track frame-to-track]
-                  [timer timer])
-              (and frame-to-track
-                   (new timer%
-                        [notify-callback
-                         (λ ()
-                           (unless (send frame-to-track is-shown?)
-                             (show #f)
-                             (and timer (send timer stop))))])))])
+    (define timer
+      (let ([frame-to-track frame-to-track]
+            [timer timer])
+        (and frame-to-track
+             (new timer%
+                  [notify-callback
+                   (λ ()
+                     (unless (send frame-to-track is-shown?)
+                       (show #f)
+                       (and timer (send timer stop))))]))))
     
     (define/override (on-subwindow-event r evt)
       (and (is-shown?)
