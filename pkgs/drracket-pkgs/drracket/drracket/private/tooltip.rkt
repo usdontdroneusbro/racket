@@ -5,7 +5,7 @@
 (provide tooltip-frame%)
 
 (define-type YellowMessage%
-  (Class #:extends Canvas%-intf
+  (Class #:extends Canvas%
          (init [parent (Instance Frame%)]
                [style (U 'border 'control-border 'combo
                          'vscroll 'hscroll 'resize-corner
