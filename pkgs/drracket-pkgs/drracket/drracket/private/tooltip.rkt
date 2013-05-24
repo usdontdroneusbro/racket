@@ -6,10 +6,7 @@
 
 (define-type YellowMessage%
   (Class #:extends Canvas%-intf
-         (init [parent (Instance Frame%)
-                       ;; there are three more cases, but contracts
-                       ;; don't work the way you'd want here
-                       ]
+         (init [parent (Instance Frame%)]
                [style (U 'border 'control-border 'combo
                          'vscroll 'hscroll 'resize-corner
                          'gl 'no-autoclear 'transparent
@@ -101,8 +98,6 @@
         (cond
           [on? (send timer* start 200 #f)]
           [else (send timer* stop)]))
-      ;; Need `super` for this
-      #;
       (super show on?))
     
     (: show-over (Integer Integer Integer Integer [#:prefer-upper-left? Any] -> Void))
@@ -144,3 +139,4 @@
 
     (: yellow-message (Instance YellowMessage%))
     (field [yellow-message (new yellow-message% [parent this])])))
+
