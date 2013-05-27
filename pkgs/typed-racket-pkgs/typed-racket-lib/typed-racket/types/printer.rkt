@@ -242,20 +242,14 @@
      (for/list ([init inits])
        (match-define (list name type opt?) init)
        (if opt?
-           (list name ': type '#:optional)
-           (list name ': type)))))
-  ;; insert the ':
-  (define (transform-fields)
-    (cons 'field
-     (for/list ([field fields])
-       (match-define (list name type) field)
-       (list name ': type))))
+           (list name type '#:optional)
+           (list name type)))))
   (fp "~a"
       `(,(if object? 'Object 'Class)
         ,@(if (or object? (null? inits))
               '()
               (list (transform-inits)))
-        ,@(if (null? fields) '() (list (transform-fields)))
+        ,@(if (null? fields) '() (cons 'fields fields))
         ,@methods)))
 
 ;; print out a type
@@ -404,7 +398,7 @@
     [(Syntax: t) (fp "(Syntaxof ~a)" t)]
     [(Instance: (and (? has-name?) t)) (fp "(Instance ~a)" t)]
     [(Instance: (? Class? ty)) (print-class-type ty fp #:object? #t)]
-    [(and ty (Class: _ _ _ _)) (print-class-type ty fp)]
+    [(? Class? ty) (print-class-type ty fp)]
     [(Result: t (FilterSet: (Top:) (Top:)) (Empty:)) (fp "~a" t)]
     [(Result: t fs (Empty:)) (fp "(~a : ~a)" t fs)]
     [(Result: t fs lo) (fp "(~a : ~a : ~a)" t fs lo)]
