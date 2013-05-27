@@ -233,8 +233,8 @@
                   (string-join (map format-arr b) (if multi-line? "\n        " " ")))]))]))
 
 ;; print-class-type : Type (Any ... -> Void) -> String
-;; Print a class type
-(define (print-class-type type fp)
+;; Print a class or object type
+(define (print-class-type type fp #:object? [object? #f])
   (match-define (Class: _ inits fields methods) type)
   ;; replace booleans with keyword or nothing in inits
   (define (transform-inits)
@@ -251,9 +251,12 @@
        (match-define (list name type) field)
        (list name ': type))))
   (fp "~a"
-      `(Class ,@(if (null? inits) '() (list (transform-inits)))
-              ,@(if (null? fields) '() (list (transform-fields)))
-              ,@methods)))
+      `(,(if object? 'Object 'Class)
+        ,@(if (or object? (null? inits))
+              '()
+              (list (transform-inits)))
+        ,@(if (null? fields) '() (list (transform-fields)))
+        ,@methods)))
 
 ;; print out a type
 ;; print-type : Type Port Boolean -> Void
@@ -399,7 +402,8 @@
 
     [(B: idx) (fp "(B ~a)" idx)]
     [(Syntax: t) (fp "(Syntaxof ~a)" t)]
-    [(Instance: t) (fp "(Instance ~a)" t)]
+    [(Instance: (and (? has-name?) t)) (fp "(Instance ~a)" t)]
+    [(Instance: (? Class? ty)) (print-class-type ty fp #:object? #t)]
     [(and ty (Class: _ _ _ _)) (print-class-type ty fp)]
     [(Result: t (FilterSet: (Top:) (Top:)) (Empty:)) (fp "~a" t)]
     [(Result: t fs (Empty:)) (fp "(~a : ~a)" t fs)]
