@@ -16,7 +16,9 @@
 ;; special type names that are not bound to particular types
 (define-other-types
   -> case-> U Rec All Opaque Vector
-  Parameterof List List* Class Values Instance Refinement
+  Parameterof List List*
+  Class Object Instance
+  Values Refinement
   pred Struct)
 
 (provide (rename-out [All ∀]

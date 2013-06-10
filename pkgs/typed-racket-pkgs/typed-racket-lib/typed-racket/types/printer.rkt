@@ -249,7 +249,7 @@
         ,@(if (or object? (null? inits))
               '()
               (list (transform-inits)))
-        ,@(if (null? fields) '() (cons 'fields fields))
+        ,@(if (null? fields) '() (list (cons 'fields fields)))
         ,@methods)))
 
 ;; print out a type
