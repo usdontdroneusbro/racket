@@ -138,7 +138,5 @@
                [stretchable-height #f])
 
     (: yellow-message (Instance YellowMessage%))
-    #;
-    (field [yellow-message (new yellow-message% [parent this])])
     (define yellow-message (new yellow-message% [parent this]))))
 
