@@ -527,7 +527,7 @@ scheme_init_struct (Scheme_Env *env)
   scheme_add_global_constant("make-struct-type-property", 
 			    scheme_make_prim_w_arity2(make_struct_type_property,
 						      "make-struct-type-property",
-						      1, 4,
+						      1, 5,
 						      3, 3),
 			    env);
 
@@ -1205,8 +1205,17 @@ static Scheme_Object *make_struct_type_property_from_c(int argc, Scheme_Object *
                               2, argc, argv);
       }
 
-      if (argc > 3)
+      if (argc > 3) {
         can_impersonate = SCHEME_TRUEP(argv[3]);
+
+        if (argc > 4) {
+          if (SCHEME_TRUEP(argv[4])
+              && !scheme_check_proc_arity(NULL, 3, 4, argc, argv))
+            scheme_wrong_contract(who,
+                                  "(or/c (any/c any/c any/c . -> . any))",
+                                  4, argc, argv);
+        }
+      }
     }
   }
 
@@ -1215,6 +1224,8 @@ static Scheme_Object *make_struct_type_property_from_c(int argc, Scheme_Object *
   p->name = argv[0];
   if ((argc > 1) && SCHEME_TRUEP(argv[1]))
     p->guard = argv[1];
+  if ((argc > 4) && SCHEME_TRUEP(argv[4]))
+    p->inherit_guard = argv[4];
   p->supers = supers;
   p->can_impersonate = can_impersonate;
 
@@ -1397,6 +1408,32 @@ static Scheme_Object *guard_property(Scheme_Object *prop, Scheme_Object *v, Sche
     } else
       return v;
   }
+}
+
+static Scheme_Object *inherit_guard_property(Scheme_Object *prop, Scheme_Object *v,
+                                             Scheme_Object *oldv, Scheme_Struct_Type *t)
+{
+  Scheme_Struct_Property *p = (Scheme_Struct_Property *)prop;
+
+  if (p->inherit_guard) {
+    if(!scheme_defining_primitives) {
+      Scheme_Object *a[3], *info[mzNUM_ST_INFO], *l;
+
+      a[0] = (Scheme_Object *)t;
+      get_struct_type_info(1, a, info, 1);
+
+      l = scheme_build_list(mzNUM_ST_INFO, info);
+
+      a[0] = v;
+      a[1] = oldv;
+      a[2] = l;
+
+      return _scheme_apply(p->inherit_guard, 3, a);
+    }
+    else
+      return v;
+  } else
+    return v;
 }
 
 /*========================================================================*/
@@ -4403,6 +4440,7 @@ static Scheme_Object *_make_struct_type(Scheme_Object *base,
             }
             /* otherwise we override */
             scheme_hash_set(can_override, prop, NULL);
+            propv = inherit_guard_property(prop, propv, oldv, struct_type);
           }
         }
         
@@ -4461,6 +4499,7 @@ static Scheme_Object *_make_struct_type(Scheme_Object *base,
             }
             /* overriding it: */
             scheme_hash_set(can_override, prop, NULL);
+            propv = inherit_guard_property(prop, propv, SCHEME_CDR(pa[j]), struct_type);
           } else
             num_props++;
         }

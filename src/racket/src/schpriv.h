@@ -818,6 +818,7 @@ typedef struct Scheme_Struct_Property {
   char can_impersonate; /* 1 if impersonatable property, 0 otherwise */
   Scheme_Object *name; /* a symbol */
   Scheme_Object *guard; /* NULL, a procedure, or 'can-impersonate */
+  Scheme_Object *inherit_guard; /* NULL, or a procedure */
   Scheme_Object *supers; /* implied properties: listof (cons <prop> <proc>) */
 } Scheme_Struct_Property;
 
