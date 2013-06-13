@@ -4,7 +4,7 @@
 
 (require "../utils/utils.rkt"
          (except-in (rep type-rep object-rep filter-rep) make-arr)
-         (rename-in (types abbrev union utils filter-ops resolve)
+         (rename-in (types abbrev union utils filter-ops resolve classes)
                     [make-arr* make-arr])
          (utils tc-utils stxclass-util)
          syntax/stx (prefix-in c: (contract-req))
@@ -12,6 +12,7 @@
          (env tvar-env type-name-env type-alias-env lexical-env index-env)
          (only-in racket/class init init-field field)
          (only-in racket/list flatten)
+         racket/format
          racket/match
          racket/syntax
          (only-in unstable/list check-duplicate)
@@ -86,6 +87,25 @@
        (add-disappeared-use #'kw)
        (extend-tvars vars
          (make-Poly vars (parse-type #'t.type))))]
+    ;; Next two are row polymorphic cases
+    [((~and kw t:All) (var:id #:row) . t:all-body)
+     (add-disappeared-use #'kw)
+     (define var* (syntax-e #'var))
+     (define body-type
+       (extend-tvars (list var*) (parse-type #'t.type)))
+     (make-PolyRow
+      var*
+      ;; No constraints listed, so we need to infer the constraints
+      (infer-row-constraints body-type)
+      body-type)]
+    [((~and kw t:All) (var:id #:row constr:row-constraints) . t:all-body)
+     (add-disappeared-use #'kw)
+     (define var* (syntax-e #'var))
+     (extend-tvars (list var*)
+       (make-PolyRow
+        var*
+        (attribute constr.constraints)
+        (parse-type #'t.type)))]
     [(t:All (_:id ...) _ _ _ ...) (tc-error "All: too many forms in body of All type")]
     [(t:All . rest) (tc-error "All: bad syntax")]))
 
@@ -96,7 +116,7 @@
            #:attr Keyword (make-Keyword (syntax-e #'k) (parse-type #'t) #f)))
 
 (define-syntax-class non-keyword-ty
-  (pattern (k e:expr ...)
+  (pattern (k e ...)
            #:when (not (keyword? (syntax->datum #'k))))
   (pattern t:expr
            #:when (and (not (keyword? (syntax->datum #'t)))
@@ -520,14 +540,15 @@
 
 (define-splicing-syntax-class class-type-clauses
   #:description "Class type clause"
-  #:attributes (self extends-types
+  #:attributes (row-var self extends-types
                 init-names init-types init-optional?s
                 init-field-names init-field-types
                 init-field-optional?s
                 field-names field-types
                 method-names method-types)
   #:literals (init init-field field)
-  (pattern (~seq (~or (~seq #:implements extends-type:expr)
+  (pattern (~seq (~or (~optional (~seq #:row-var row-var:id))
+                      (~seq #:implements extends-type:expr)
                       (~optional (~seq #:self self:id))
                       (init init-clause:init-type ...)
                       (init-field init-field-clause:init-type ...)
@@ -572,9 +593,10 @@
   #:attributes (label type)
   (pattern (label:id type:expr)))
 
-;; process-class-clauses : Syntax FieldDict MethodDict -> FieldDict MethodDict
+;; process-class-clauses : Option<F> Syntax FieldDict MethodDict
+;;                         -> Option<Id> FieldDict MethodDict
 ;; Merges #:implements class type and the current class clauses appropriately
-(define (merge-with-parent-type stx fields methods)
+(define (merge-with-parent-type row-var stx fields methods)
   ;; (Listof Symbol) Dict Dict String -> (Values Dict Dict)
   ;; check for duplicates in a class clause
   (define (check-duplicate-clause names super-names types super-types err-msg)
@@ -596,12 +618,12 @@
   (define parent-type (parse-type stx))
   (define (match-parent-type parent-type)
     (match parent-type
-      [(Class: _ _ fields methods)
-       (values fields methods)]
+      [(Class: row-var _ fields methods)
+       (values row-var fields methods)]
       [(? Mu?)
        (match-parent-type (unfold parent-type))]
       [_ (tc-error "expected a class type for #:implements clause")]))
-  (define-values (super-fields super-methods)
+  (define-values (super-row-var super-fields super-methods)
     (match-parent-type parent-type))
 
   (match-define (list (list field-names _) ...) fields)
@@ -622,10 +644,16 @@
     methods super-methods
     "method name ~a conflicts with #:implements clause"))
 
+  ;; it is an error for both the extending type and extended type
+  ;; to have row variables
+  (when (and row-var super-row-var)
+    (tc-error (~a "class type with row variable cannot"
+                  " extend another type that has a row variable")))
+
   ;; then append the super types if there were no errors
   (define merged-fields (append checked-super-fields checked-fields))
   (define merged-methods (append checked-super-methods checked-methods))
-  (values merged-fields merged-methods))
+  (values (or row-var super-row-var) merged-fields merged-methods))
 
 ;; Syntax -> Type
 ;; Parse a (Object ...) type
@@ -677,18 +705,20 @@
        (for/list ([name (stx-map syntax-e #'clause.method-names)]
                   [type (stx-map parse-type* #'clause.method-types)])
          (list name type)))
+     (define given-row-var
+       (and (attribute clause.row-var)
+            (parse-type (attribute clause.row-var))))
 
      ;; merge with all given parent types, erroring if needed
-     (define-values (fields methods)
-      (for/fold ([fields given-fields]
+     (define-values (row-var fields methods)
+      (for/fold ([row-var given-row-var]
+                 [fields given-fields]
                  [methods given-methods])
                 ([parent-type parent-types])
-        (merge-with-parent-type parent-type fields methods)))
+        (merge-with-parent-type row-var parent-type fields methods)))
 
      (define class-type
-       (make-Class
-        #f ;; FIXME: put type if it's a row variable
-        given-inits fields methods))
+       (make-Class row-var given-inits fields methods))
 
      (cond [recursive-type
             =>

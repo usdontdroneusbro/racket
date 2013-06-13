@@ -235,7 +235,7 @@
 ;; print-class-type : Type (Any ... -> Void) -> String
 ;; Print a class or object type
 (define (print-class-type type fp #:object? [object? #f])
-  (match-define (Class: _ inits fields methods) type)
+  (match-define (Class: row-var inits fields methods) type)
   ;; replace booleans with keyword or nothing in inits
   (define (transform-inits)
     (cons 'init
@@ -246,6 +246,9 @@
            (list name type)))))
   (fp "~a"
       `(,(if object? 'Object 'Class)
+        ,@(if row-var
+              `(#:row-var ,(F-n row-var))
+              '())
         ,@(if (or object? (null? inits))
               '()
               (list (transform-inits)))
@@ -375,6 +378,9 @@
     [(PolyDots-unsafe: n b) (fp "(unsafe-polydots ~a ~a ~a)" (Type-seq c) n b)]
     [(PolyDots-names: (list names ... dotted) body)
      (fp "(All ~a ~a)" (append names (list dotted '...)) body)]
+    ;; FIXME: should this print constraints too
+    [(PolyRow-names: name body)
+     (fp "(All (~a #:row) ~a)" name body)]
     #;
     [(Mu-unsafe: b) (fp "(unsafe-mu ~a ~a)" (Type-seq c) b)]
     [(Mu: x (Syntax: (Union: (list

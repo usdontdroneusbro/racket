@@ -11,7 +11,8 @@
          (private parse-type)
          rackunit
          (only-in racket/class init init-field field)
-         racket/dict)
+         racket/dict
+         racket/set)
 
 (provide parse-type-tests)
 
@@ -171,6 +172,27 @@
     (-mu This%
       (make-Class
        #f null null `((m ,(t:-> (make-Instance This%) N)))))]
+   ;; test #:row-var
+   [(All (r #:row) (Class #:row-var r))
+    (make-PolyRow 'r
+                  (list (set) (set) (set))
+                  (make-Class (make-F 'r) null null null))]
+   [(All (r #:row) (Class #:implements (Class #:row-var r)))
+    (make-PolyRow 'r
+                  (list (set) (set) (set))
+                  (make-Class (make-F 'r) null null null))]
+   [(All (r #:row) (Class #:implements (Class) #:row-var r))
+    (make-PolyRow 'r
+                  (list (set) (set) (set))
+                  (make-Class (make-F 'r) null null null))]
+   [FAIL (Class #:row-var 5)]
+   [FAIL (Class #:row-var (list 3))]
+   [FAIL (Class #:implements (Class #:row-var r) #:row-var x)]
+   [FAIL (Class #:implements (Class #:row-var r) #:row-var r)]
+   [FAIL (All (r #:row)
+           (All (x #:row)
+            (Class #:implements (Class #:row-var r) #:row-var x)))]
+   [FAIL (All (r #:row) (Class #:implements (Class #:row-var r) #:row-var r))]
    ;; test #:implements
    [(Class #:implements (Class [m (Number -> Number)]) (field [x Number]))
     (make-Class #f null `((x ,-Number)) `((m ,(t:-> N N))))]
@@ -203,7 +225,17 @@
    [FAIL (Object (random-clause [x Number]))]
    [FAIL (Object [x Number] [x Number])]
    [FAIL (Object (field [x Number]) (field [x Number]))]
-   [FAIL (Object [x Number] [x Number])]))
+   [FAIL (Object [x Number] [x Number])]
+   ;; Test row polymorphic types
+   [(All (r #:row) ((Class #:row-var r) -> (Class #:row-var r)))
+    (-polyrow (r) (list (set) (set) (set))
+      (t:-> (make-Class r null null null)
+            (make-Class r null null null)))]
+   [(All (r #:row (init x y z) (field f) m n)
+      ((Class #:row-var r) -> (Class #:row-var r)))
+    (-polyrow (r) (list (set 'x 'y 'z) (set 'f) (set 'm 'n))
+      (t:-> (make-Class r null null null)
+            (make-Class r null null null)))]))
 
 ;; FIXME - add tests for parse-values-type, parse-tc-results
 

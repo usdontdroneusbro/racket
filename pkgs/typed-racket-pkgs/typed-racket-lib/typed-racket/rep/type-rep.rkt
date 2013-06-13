@@ -11,15 +11,17 @@
          racket/match racket/list
          racket/contract
          racket/lazy-require
+         racket/set
          (for-syntax racket/base syntax/parse))
 
 (provide Mu-name:
          Poly-names: Poly-fresh:
          PolyDots-names:
+         PolyRow-names: PolyRow-fresh:
          Type-seq
          Mu-unsafe: Poly-unsafe:
          PolyDots-unsafe:
-         Mu? Poly? PolyDots?
+         Mu? Poly? PolyDots? PolyRow?
          Filter? Object?
          Type/c Type/c?
          Values/c SomeValues/c
@@ -32,12 +34,15 @@
          (rename-out [Mu:* Mu:]
                      [Poly:* Poly:]
                      [PolyDots:* PolyDots:]
+                     [PolyRow:* PolyRow:]
                      [Mu* make-Mu]
                      [Poly* make-Poly]
                      [PolyDots* make-PolyDots]
+                     [PolyRow* make-PolyRow]
                      [Mu-body* Mu-body]
                      [Poly-body* Poly-body]
-                     [PolyDots-body* PolyDots-body]))
+                     [PolyDots-body* PolyDots-body]
+                     [PolyRow-body* PolyRow-body]))
 
 (provide/cond-contract [type-equal? (Rep? Rep? . -> . boolean?)])
 
@@ -234,6 +239,20 @@
   [#:frees (λ (f) (f body))]
   [#:fold-rhs (let ([body* (remove-scopes n body)])
                 (*PolyDots n (add-scopes n (type-rec-id body*))))])
+
+;; interp. A row polymorphic function type
+;; constraints are row absence constraints, represented
+;; as a set for each of init, field, methods
+(def-type PolyRow (constraints body) #:no-provide
+  [#:contract (->i ([constraints (list/c set? set? set?)]
+                    [body (scope-depth 1)])
+                   (#:syntax [stx (or/c #f syntax?)])
+                   [result Poly?])]
+  [#:frees (λ (f) (f body))]
+  [#:fold-rhs (let ([body* (remove-scopes 1 body)])
+                (*Poly constraints
+                       (add-scopes 1 (type-rec-id body*))))]
+  [#:key (Type-key body)])
 
 ;; pred : identifier
 (def-type Opaque ([pred identifier?])
@@ -434,7 +453,7 @@
 ;; t : Type
 (def-type Syntax ([t Type/c]) [#:key 'syntax])
 
-;; extended-tvar : RowVar
+;; row-var : Option<F>
 ;; name-inits    : (Listof (Tuple Symbol Type Boolean))
 ;; fields        : (Listof (Tuple Symbol Type))
 ;; methods       : (Listof (Tuple Symbol Function))
@@ -445,23 +464,26 @@
 ;;         The remainder are the types for public fields and
 ;;         public methods, respectively.
 ;;
-(def-type Class ([extended-tvar (listof Type/c)]
+(def-type Class ([row-var (or/c #f F?)]
                  [inits (listof (list/c symbol? Type/c boolean?))]
                  [fields (listof (list/c symbol? Type/c))]
                  [methods (listof (list/c symbol? Function?))])
   [#:frees (λ (f) (combine-frees
-                   (map f (append (map cadr inits)
-                                  (map cadr fields)
-                                  (map cadr methods)))))]
+                   ;; FIXME: is this correct?
+                   `(,@(or (and row-var (list (f row-var)))
+                           '())
+                     ,@(map f (append (map cadr inits)
+                                      (map cadr fields)
+                                      (map cadr methods))))))]
   [#:key 'class]
-  [#:fold-rhs (match (list extended-tvar inits fields methods)
+  [#:fold-rhs (match (list row-var inits fields methods)
                 [(list
-                  tvar
+                  row-var
                   (list (list init-names init-tys reqd) ___)
                   (list (list fname fty) ___)
                   (list (list mname mty) ___))
                  (*Class
-                  tvar ;; FIXME: is this correct?
+                  row-var ;; FIXME: is this correct?
                   (map list
                        init-names
                        (map type-rec-id init-tys)
@@ -706,6 +728,17 @@
        (int-err "Wrong number of names: expected ~a got ~a" n (length names)))
      (instantiate-many (map *F names) scope)]))
 
+;; constructor and destructor for row polymorphism
+(define (PolyRow* name constraints body #:original-name [orig name])
+  (let ([v (*PolyRow constraints (abstract-many (list name) body))])
+    (hash-set! name-table v orig)
+    v))
+
+(define (PolyRow-body* name t)
+  (match t
+    [(PolyRow: constraints scope)
+     (instantiate-many (list (*F name)) scope)]))
+
 (print-struct #t)
 
 (define-match-expander Mu-unsafe:
@@ -815,4 +848,35 @@
                           [syms (hash-ref name-table t (lambda _ (build-list n (lambda _ (gensym)))))])
                      (list syms (PolyDots-body* syms t))))
                  (list nps bp)))])))
+
+(define-match-expander PolyRow:*
+  (lambda (stx)
+    (syntax-case stx ()
+      [(_ np bp)
+       #'(? PolyRow?
+            (app (lambda (t)
+                   (define sym (gensym))
+                   (list sym (PolyRow-body* sym t)))
+                 (list np bp)))])))
+
+(define-match-expander PolyRow-names:
+  (lambda (stx)
+    (syntax-case stx ()
+      [(_ np bp)
+       #'(? PolyRow?
+            (app (lambda (t)
+                   (define sym (hash-ref name-table t (λ _ (gensym))))
+                   (list sym (PolyRow-body* sym t)))
+                 (list np bp)))])))
+
+(define-match-expander PolyRow-fresh:
+  (lambda (stx)
+    (syntax-case stx ()
+      [(_ np freshp bp)
+       #'(? PolyRow?
+            (app (lambda (t)
+                   (define sym (hash-ref name-table t (λ _ (gensym))))
+                   (define fresh-sym (gensym sym))
+                   (list sym fresh-sym (PolyRow-body* fresh-sym t)))
+                 (list np freshp bp)))])))
 
