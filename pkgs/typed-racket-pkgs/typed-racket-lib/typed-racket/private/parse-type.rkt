@@ -596,7 +596,7 @@
 ;; Parse a (Class ...) type
 (define (parse-class-type stx)
   (syntax-parse stx
-    [(kw clause:class-type-clauses)
+    [(kw (~var clause (class-type-clauses parse-type)))
      (add-disappeared-use #'kw)
      (define parent-types (stx->list #'clause.extends-types))
      (define recursive-type (attribute clause.self))
@@ -609,24 +609,9 @@
               (λ (stx) (extend-tvars (list var) (parse-type stx)))]
              [else parse-type]))
 
-     (define given-inits
-       (for/list ([name (append (stx-map syntax-e #'clause.init-names)
-                                (stx-map syntax-e #'clause.init-field-names))]
-                  [type (append (stx-map parse-type* #'clause.init-types)
-                                (stx-map parse-type* #'clause.init-field-types))]
-                  [optional? (append (attribute clause.init-optional?s)
-                                     (attribute clause.init-field-optional?s))])
-         (list name type optional?)))
-     (define given-fields
-       (for/list ([name (append (stx-map syntax-e #'clause.field-names)
-                                (stx-map syntax-e #'clause.init-field-names))]
-                  [type (append (stx-map parse-type* #'clause.field-types)
-                                (stx-map parse-type* #'clause.init-field-types))])
-         (list name type)))
-     (define given-methods
-       (for/list ([name (stx-map syntax-e #'clause.method-names)]
-                  [type (stx-map parse-type* #'clause.method-types)])
-         (list name type)))
+     (define given-inits (attribute clause.inits))
+     (define given-fields (attribute clause.fields))
+     (define given-methods (attribute clause.methods))
      (define given-row-var
        (and (attribute clause.row-var)
             (parse-type (attribute clause.row-var))))
