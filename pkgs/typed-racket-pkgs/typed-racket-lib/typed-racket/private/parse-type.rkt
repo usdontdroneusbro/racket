@@ -598,17 +598,8 @@
   (syntax-parse stx
     [(kw (~var clause (class-type-clauses parse-type)))
      (add-disappeared-use #'kw)
+
      (define parent-types (stx->list #'clause.extends-types))
-     (define recursive-type (attribute clause.self))
-
-     ;; parsing the init, fields, and methods need to be aware of
-     ;; the self type if it's given
-     (define parse-type*
-       (cond [recursive-type
-              (define var (syntax-e recursive-type))
-              (λ (stx) (extend-tvars (list var) (parse-type stx)))]
-             [else parse-type]))
-
      (define given-inits (attribute clause.inits))
      (define given-fields (attribute clause.fields))
      (define given-methods (attribute clause.methods))
@@ -627,11 +618,7 @@
      (define class-type
        (make-Class row-var given-inits fields methods))
 
-     (cond [recursive-type
-            =>
-            (λ (self-id)
-              (make-Mu (syntax-e self-id) class-type))]
-           [else class-type])]))
+     class-type]))
 
 (define (parse-tc-results stx)
   (syntax-parse stx #:literals (values)

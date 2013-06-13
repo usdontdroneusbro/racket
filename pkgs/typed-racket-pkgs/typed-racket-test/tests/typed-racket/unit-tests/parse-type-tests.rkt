@@ -167,11 +167,6 @@
    [FAIL (Class (init [x Number]) (init [x Number]))]
    [FAIL (Class (init [x Number]) (init-field [x Number]))]
    [FAIL (Class (field [x Number]) (init-field [x Number]))]
-   ;; test #:self
-   [(Class #:self This% [m ((Instance This%) -> Number)])
-    (-mu This%
-      (make-Class
-       #f null null `((m ,(t:-> (make-Instance This%) N)))))]
    ;; test #:row-var
    [(All (r #:row) (Class #:row-var r))
     (make-PolyRow 'r

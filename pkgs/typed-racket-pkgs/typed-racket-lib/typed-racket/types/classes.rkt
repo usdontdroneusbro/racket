@@ -112,11 +112,10 @@
 ;; dependencies
 (define-splicing-syntax-class (class-type-clauses parse-type)
   #:description "Class type clause"
-  #:attributes (row-var self extends-types
+  #:attributes (row-var extends-types
                 inits fields methods)
   (pattern (~seq (~or (~optional (~seq #:row-var row-var:id))
                       (~seq #:implements extends-type:expr)
-                      (~optional (~seq #:self self:id))
                       (~var clause (type-clause parse-type)))
                  ...)
            #:attr inits (apply append (attribute clause.init-entries))
