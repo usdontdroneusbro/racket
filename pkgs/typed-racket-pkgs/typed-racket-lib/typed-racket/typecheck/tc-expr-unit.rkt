@@ -5,7 +5,7 @@
          racket/match (prefix-in - (contract-req))
          "signatures.rkt"
          "check-below.rkt" "tc-app-helper.rkt" "../types/kw-types.rkt"
-         (types utils abbrev union subtype type-table)
+         (types utils abbrev union subtype type-table classes)
          (private-in parse-type type-annotation syntax-properties)
          (rep type-rep filter-rep object-rep)
          (utils tc-utils)
@@ -23,8 +23,17 @@
 (export tc-expr^)
 
 ;; do-inst : syntax type -> type
+;; Perform a type instantiation, delegating to the appropriate helper
+;; function depending on if the argument is a row or not
 (define (do-inst stx ty)
   (define inst (type-inst-property stx))
+  (if (Row? inst)
+      (do-row-inst stx inst ty)
+      (do-normal-inst stx inst ty)))
+
+;; do-normal-inst : Syntax Syntax Type -> Type
+;; Instantiate a normal polymorphic type
+(define (do-normal-inst stx inst ty)
   (define (split-last l)
     (let-values ([(all-but last-list) (split-at l (sub1 (length l)))])
       (values all-but (car last-list))))
@@ -76,6 +85,24 @@
               [else
                (instantiate-poly ty (stx-map parse-type inst))])))]
     [_ (if inst
+           (tc-error/expr #:return (Un)
+                          "Cannot instantiate expression that produces ~a values"
+                          (if (null? ty) 0 "multiple"))
+           ty)]))
+
+;; do-row-inst : Syntax ClassRow Type -> Type
+;; Instantiate a row polymorphic function
+(define (do-row-inst stx row ty)
+  (match ty
+    ;; FIXME: check row constraints here
+    [(list ty)
+     (list
+      (cond [(not row) ty]
+            [(not (PolyRow? ty))
+             (tc-error/expr #:return (Un) "Cannot instantiate non-row-polymorphic type ~a"
+                            (cleanup-type ty))]
+            [else (instantiate-poly ty (list row))]))]
+    [_ (if row
            (tc-error/expr #:return (Un)
                           "Cannot instantiate expression that produces ~a values"
                           (if (null? ty) 0 "multiple"))

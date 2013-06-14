@@ -16,6 +16,7 @@
          (for-template racket/class))
 
 (provide row-constraints
+         row-clauses
          infer-row-constraints
          object-type-clauses
          class-type-clauses)
@@ -60,11 +61,14 @@
 ;; Row types are similar to class types
 (define-splicing-syntax-class (row-clauses parse-type)
   #:description "Row type clause"
-  #:attributes (inits fields methods)
+  #:attributes (row)
   (pattern (~seq (~var clause (type-clause parse-type)) ...)
            #:attr inits (apply append (attribute clause.init-entries))
            #:attr fields (apply append (attribute clause.field-entries))
            #:attr methods (apply append (attribute clause.method-entries))
+           #:attr row (make-Row (attribute inits)
+                                (attribute fields)
+                                (attribute methods))
            #:fail-when
            (check-duplicate (map first (attribute inits)))
            "duplicate init or init-field clause"

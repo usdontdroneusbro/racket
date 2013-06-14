@@ -453,7 +453,33 @@
 ;; t : Type
 (def-type Syntax ([t Type/c]) [#:key 'syntax])
 
-;; row-var : Option<F>
+;; A Row used in type instantiation
+;; For now, this should not appear in user code. It's used
+;; internally to perform row instantiations
+;;
+;; FIXME: should Classes just use this?
+;;
+(def-type Row ([inits (listof (list/c symbol? Type/c boolean?))]
+               [fields (listof (list/c symbol? Type/c))]
+               [methods (listof (list/c symbol? Function?))])
+  [#:frees (λ (f) (combine-frees
+                   (map f (append (map cadr inits)
+                                  (map cadr fields)
+                                  (map cadr methods)))))]
+  [#:fold-rhs (match (list inits fields methods)
+                [(list
+                  (list (list init-names init-tys reqd) ___)
+                  (list (list fname fty) ___)
+                  (list (list mname mty) ___))
+                 (*Row
+                  (map list
+                       init-names
+                       (map type-rec-id init-tys)
+                       reqd)
+                  (map list fname (map type-rec-id fty))
+                  (map list mname (map type-rec-id mty)))])])
+
+;; row : Option<(U F Row)>
 ;; name-inits    : (Listof (Tuple Symbol Type Boolean))
 ;; fields        : (Listof (Tuple Symbol Type))
 ;; methods       : (Listof (Tuple Symbol Function))
@@ -464,26 +490,26 @@
 ;;         The remainder are the types for public fields and
 ;;         public methods, respectively.
 ;;
-(def-type Class ([row-var (or/c #f F?)]
+(def-type Class ([row (or/c #f F? Row?)]
                  [inits (listof (list/c symbol? Type/c boolean?))]
                  [fields (listof (list/c symbol? Type/c))]
                  [methods (listof (list/c symbol? Function?))])
   [#:frees (λ (f) (combine-frees
                    ;; FIXME: is this correct?
-                   `(,@(or (and row-var (list (f row-var)))
+                   `(,@(or (and (F? row) (list (f row)))
                            '())
                      ,@(map f (append (map cadr inits)
                                       (map cadr fields)
                                       (map cadr methods))))))]
   [#:key 'class]
-  [#:fold-rhs (match (list row-var inits fields methods)
+  [#:fold-rhs (match (list row inits fields methods)
                 [(list
-                  row-var
+                  row
                   (list (list init-names init-tys reqd) ___)
                   (list (list fname fty) ___)
                   (list (list mname mty) ___))
                  (*Class
-                  row-var ;; FIXME: is this correct?
+                  (and row (type-rec-id row))
                   (map list
                        init-names
                        (map type-rec-id init-tys)
