@@ -28,9 +28,15 @@
 ;; function depending on if the argument is a row or not
 (define (do-inst stx ty)
   (define inst (type-inst-property stx))
-  (if (Row? inst)
+  (if (row-syntax? inst)
       (do-row-inst stx inst ty)
       (do-normal-inst stx inst ty)))
+
+;; row-syntax? Syntax -> Boolean
+;; This checks if the syntax object resulted from a row instantiation
+(define (row-syntax? stx)
+  (define lst (stx->list stx))
+  (and lst (eq? (syntax-e (car lst)) '#:row)))
 
 ;; do-normal-inst : Syntax Syntax Type -> Type
 ;; Instantiate a normal polymorphic type
@@ -93,7 +99,14 @@
 
 ;; do-row-inst : Syntax ClassRow Type -> Type
 ;; Instantiate a row polymorphic function
-(define (do-row-inst stx row ty)
+(define (do-row-inst stx row-stx ty)
+  ;; At this point, we know `stx` represents a row so we can parse it.
+  ;; The parsing is done here because if `inst` did the parsing, it's
+  ;; too early and ends up with an empty type environment.
+  (define row
+    (syntax-parse row-stx
+      [(#:row (~var clauses (row-clauses parse-type)))
+       (attribute clauses.row)]))
   (match ty
     [(list ty)
      (list

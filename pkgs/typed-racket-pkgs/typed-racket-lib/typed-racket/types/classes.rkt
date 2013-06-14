@@ -9,7 +9,6 @@
          racket/dict
          racket/list
          racket/match
-         racket/set
          syntax/parse
          syntax/stx
          (only-in unstable/list check-duplicate)
@@ -26,7 +25,7 @@
 ;; Data definitions
 ;;
 ;; A RowConstraint is a
-;;   List(Set<Id>, Set<Id>, Set<id>)
+;;   List(List<Sym>, List<Sym>, List<Sym>)
 
 ;; Syntax -> Syntax
 ;; Turn into datums and then flatten
@@ -56,9 +55,9 @@
             (check-duplicate (attribute all-field-names))
             "duplicate field or init-field clause"
             #:attr constraints
-            (list (list->set (attribute all-init-names))
-                  (list->set (attribute all-field-names))
-                  (list->set (attribute method-names)))))
+            (list (attribute all-init-names)
+                  (attribute all-field-names)
+                  (attribute method-names))))
 
 ;; Row RowConstraints (Symbol -> Void) -> Void
 ;; Check if the given row satisfies the absence constraints
@@ -71,7 +70,7 @@
   ;; check a given clause type (e.g., init, field)
   (define (check-clauses row-dict absence-set)
     (for ([(name _) (in-dict row-dict)])
-      (when (set-member? absence-set name)
+      (when (member name absence-set)
         (fail name))))
   (check-clauses inits init-absents)
   (check-clauses fields field-absents)
@@ -102,7 +101,7 @@
 ;; Infer constraints on a row for a row polymorphic function
 ;; TODO
 (define (infer-row-constraints type)
-  (list (set) (set) (set)))
+  (list null null null))
 
 ;; Syntax -> Syntax
 ;; removes two levels of nesting

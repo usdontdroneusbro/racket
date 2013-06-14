@@ -11,8 +11,7 @@
          (private parse-type)
          rackunit
          (only-in racket/class init init-field field)
-         racket/dict
-         racket/set)
+         racket/dict)
 
 (provide parse-type-tests)
 
@@ -170,15 +169,15 @@
    ;; test #:row-var
    [(All (r #:row) (Class #:row-var r))
     (make-PolyRow 'r
-                  (list (set) (set) (set))
+                  (list null null null)
                   (make-Class (make-F 'r) null null null))]
    [(All (r #:row) (Class #:implements (Class #:row-var r)))
     (make-PolyRow 'r
-                  (list (set) (set) (set))
+                  (list null null null)
                   (make-Class (make-F 'r) null null null))]
    [(All (r #:row) (Class #:implements (Class) #:row-var r))
     (make-PolyRow 'r
-                  (list (set) (set) (set))
+                  (list null null null)
                   (make-Class (make-F 'r) null null null))]
    [FAIL (Class #:row-var 5)]
    [FAIL (Class #:row-var (list 3))]
@@ -223,12 +222,12 @@
    [FAIL (Object [x Number] [x Number])]
    ;; Test row polymorphic types
    [(All (r #:row) ((Class #:row-var r) -> (Class #:row-var r)))
-    (-polyrow (r) (list (set) (set) (set))
+    (-polyrow (r) (list null null null)
       (t:-> (make-Class r null null null)
             (make-Class r null null null)))]
    [(All (r #:row (init x y z) (field f) m n)
       ((Class #:row-var r) -> (Class #:row-var r)))
-    (-polyrow (r) (list (set 'x 'y 'z) (set 'f) (set 'm 'n))
+    (-polyrow (r) (list '(x y z) '(f) '(m n))
       (t:-> (make-Class r null null null)
             (make-Class r null null null)))]))
 

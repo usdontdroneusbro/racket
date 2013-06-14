@@ -11,7 +11,6 @@
          racket/match racket/list
          racket/contract
          racket/lazy-require
-         racket/set
          (for-syntax racket/base syntax/parse))
 
 (provide Mu-name:
@@ -244,7 +243,7 @@
 ;; constraints are row absence constraints, represented
 ;; as a set for each of init, field, methods
 (def-type PolyRow (constraints body) #:no-provide
-  [#:contract (->i ([constraints (list/c set? set? set?)]
+  [#:contract (->i ([constraints (list/c list? list? list?)]
                     [body (scope-depth 1)])
                    (#:syntax [stx (or/c #f syntax?)])
                    [result Poly?])]
