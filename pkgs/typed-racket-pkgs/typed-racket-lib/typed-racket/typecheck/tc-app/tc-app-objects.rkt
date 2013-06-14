@@ -38,35 +38,35 @@
 ;; do-make-object now takes blame as its first argument, which isn't checked
 ;; (it's just an s-expression)
 (define (check-do-make-object b cl names named-args)
-  (let* ([names (stx-map syntax-e names)]
-         [name-assoc (stx-map cons names named-args)])
-    (match (resolve (tc-expr/t cl))
-      [(Union: '()) (ret (Un))]
-      [(and c (Class: pos-tys (list (and tnflds (list tnames _ _)) ...)
-                      fields _))
-       
-       (for ([name datum-names]
-             #:unless (memq name init-names))
-         (tc-error/delayed
-          "unknown named argument ~a for class\nlegal named arguments are ~a"
-          name (stringify init-names)))
-       (for ([init inits])
-         (match-define (list init-name init-type opt?) init)
-         ;; stx if argument was provided, #f if it was
-         ;; not provided (and if mandatory, it errors)
-         (define maybe-stx
-           (cond [(assq init-name name-assoc) => cadr]
-                 [(not opt?)
-                  (tc-error/delayed "value not provided for named init arg ~a"
-                                    init-name)
-                  #f]
-                 [else #f]))
-         (when maybe-stx
-           (tc-expr/check maybe-stx (ret init-type))))
-       (ret (make-Instance c))]
-      [t
-       (tc-error/expr #:return (ret (Un))
-                      "expected a class value for object creation, got: ~a" t)])))
+  (define datum-names (stx-map syntax-e names))
+  (define name-assoc (stx-map cons datum-names named-args))
+  (match (resolve (tc-expr/t cl))
+    [(Union: '()) (ret (Un))]
+    [(and c (Class: _ (list (and inits (list init-names _ _)) ...)
+                    _ _))
+     (for ([name datum-names]
+           #:unless (memq name init-names))
+       (tc-error/delayed
+        "unknown named argument ~a for class\nlegal named arguments are ~a"
+        name (stringify init-names)))
+     (for ([init inits])
+       (match-define (list init-name init-type opt?) init)
+       ;; stx if argument was provided, #f if it was
+       ;; not provided (and if mandatory, it errors)
+       (define maybe-stx
+         (dict-ref
+          name-assoc init-name
+          (λ ()
+            (unless opt?
+              (tc-error/delayed "value not provided for named init arg ~a"
+                                init-name))
+            #f)))
+       (when maybe-stx
+         (tc-expr/check maybe-stx (ret init-type))))
+     (ret (make-Instance c))]
+    [t
+     (tc-error/expr #:return (ret (Un))
+                    "expected a class value for object creation, got: ~a" t)]))
 
 ;; check-get-field : Syntax Syntax -> TCResult
 ;; type-check the `get-field` operation on objects
