@@ -6,6 +6,7 @@
 (require "../utils/utils.rkt"
          (rep type-rep)
          (except-in racket/class private)
+         racket/dict
          racket/list
          racket/match
          racket/set
@@ -18,6 +19,7 @@
 (provide row-constraints
          row-clauses
          infer-row-constraints
+         check-row-constraints
          object-type-clauses
          class-type-clauses)
 
@@ -57,6 +59,23 @@
             (list (list->set (attribute all-init-names))
                   (list->set (attribute all-field-names))
                   (list->set (attribute method-names)))))
+
+;; Row RowConstraints (Symbol -> Void) -> Void
+;; Check if the given row satisfies the absence constraints
+;; on the row variable or not. Call the fail thunk if it
+;; doesn't.
+(define (check-row-constraints row constraints fail)
+  (match-define (list init-absents field-absents method-absents)
+                constraints)
+  (match-define (Row: inits fields methods) row)
+  ;; check a given clause type (e.g., init, field)
+  (define (check-clauses row-dict absence-set)
+    (for ([(name _) (in-dict row-dict)])
+      (when (set-member? absence-set name)
+        (fail name))))
+  (check-clauses inits init-absents)
+  (check-clauses fields field-absents)
+  (check-clauses methods method-absents))
 
 ;; Row types are similar to class types
 (define-splicing-syntax-class (row-clauses parse-type)

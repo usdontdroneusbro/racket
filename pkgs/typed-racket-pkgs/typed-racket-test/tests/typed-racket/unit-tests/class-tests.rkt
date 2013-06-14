@@ -750,7 +750,30 @@
     (define c% (class: object% (super-new)
                  (: x Integer)
                  (field [x 0])))
-    (get-field x (new c%)))))
+    (get-field x (new c%)))
+
+   ;; row polymorphism, basic example with instantiation
+   (check-ok
+    (: f (All (A #:row (field x))
+           ((Class #:row-var A)
+            ->
+            (Class #:row-var A (field [x Integer])))))
+    (define (f cls)
+      (class: cls (super-new)
+        (field [x 5])))
+    (inst f #:row (field [y Integer])))
+
+   ;; fails, because the instantiation uses a field that
+   ;; is supposed to be absent via the row constraint
+   (check-err
+    (: f (All (A #:row (field x))
+           ((Class #:row-var A)
+            ->
+            (Class #:row-var A (field [x Integer])))))
+    (define (f cls)
+      (class: cls (super-new)
+        (field [x 5])))
+    (inst f #:row (field [x Integer])))))
 
 (define-go class-tests)
 
