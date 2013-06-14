@@ -878,31 +878,37 @@
 (define-match-expander PolyRow:*
   (lambda (stx)
     (syntax-case stx ()
-      [(_ np bp)
+      [(_ np constrp bp)
        #'(? PolyRow?
             (app (lambda (t)
                    (define sym (gensym))
-                   (list sym (PolyRow-body* sym t)))
-                 (list np bp)))])))
+                   (list sym
+                         (PolyRow-constraints t)
+                         (PolyRow-body* sym t)))
+                 (list np constrp bp)))])))
 
 (define-match-expander PolyRow-names:
   (lambda (stx)
     (syntax-case stx ()
-      [(_ np bp)
+      [(_ np constrp bp)
        #'(? PolyRow?
             (app (lambda (t)
                    (define sym (hash-ref name-table t (λ _ (gensym))))
-                   (list sym (PolyRow-body* sym t)))
-                 (list np bp)))])))
+                   (list sym
+                         (PolyRow-constraints t)
+                         (PolyRow-body* sym t)))
+                 (list np constrp bp)))])))
 
 (define-match-expander PolyRow-fresh:
   (lambda (stx)
     (syntax-case stx ()
-      [(_ np freshp bp)
+      [(_ np freshp constrp bp)
        #'(? PolyRow?
             (app (lambda (t)
                    (define sym (hash-ref name-table t (λ _ (gensym))))
                    (define fresh-sym (gensym sym))
-                   (list sym fresh-sym (PolyRow-body* fresh-sym t)))
-                 (list np freshp bp)))])))
+                   (list sym fresh-sym
+                         (PolyRow-constraints t)
+                         (PolyRow-body* fresh-sym t)))
+                 (list np freshp constrp bp)))])))
 
