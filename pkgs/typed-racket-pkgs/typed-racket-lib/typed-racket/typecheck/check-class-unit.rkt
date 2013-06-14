@@ -13,7 +13,7 @@
          "tc-funapp.rkt"
          "tc-subst.rkt"
          (prefix-in c: racket/class)
-         (private parse-type type-annotation)
+         (private parse-type type-annotation syntax-properties)
          (base-env class-prims)
          (env lexical-env)
          (types utils abbrev union subtype resolve)
@@ -857,7 +857,7 @@
                      body ...)])
        m)
      (define annotated-self-param
-       (syntax-property #'self-param type-ascrip-symbol self-type))
+       (type-ascription-property #'self-param self-type))
      #`(let-values ([(#,(syntax-property #'meth-name 'type-label method-type))
                      (#%plain-lambda (#,annotated-self-param id ...)
                        body ...)])
