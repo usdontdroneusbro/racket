@@ -4,7 +4,8 @@
          racket/match syntax/stx
          (prefix-in c: (contract-req))
          (for-syntax syntax/parse racket/base)
-         (types utils union subtype resolve abbrev substitute)
+         (types utils union subtype resolve abbrev
+                substitute classes)
          (typecheck tc-metafunctions tc-app-helper)
          (rep type-rep)
          (r:infer infer))
@@ -111,6 +112,28 @@
          (infer/vararg vars null argtys-t dom rest rng
                        (and expected (tc-results->values expected))))
       t argtys expected)]
+    ;; Row polymorphism. For now we do really dumb inference that only works
+    ;; in very restricted cases, but is probably enough for most cases in
+    ;; the Racket codebase. Eventually this should be extended.
+    [((tc-result1:
+       (and t (PolyRow:
+               var
+               constraints
+               (Function: (list (and arrs (arr: doms rngs rests (and drests #f)
+                                                (list (Keyword: _ _ kw?) ...)))
+                                ...)))))
+      (list (tc-result1: argtys-t) ...))
+     ;; only infer if there's 1 argument
+     (for ([dom doms])
+       (unless (and (= 1 (length argtys-t) (length dom)))
+         (poly-fail f-stx args-stx t argtys
+                        #:name (and (identifier? f-stx) f-stx)
+                        #:expected expected)))
+     (define substitution
+       (hash var (t-subst (infer-row constraints (car argtys-t)))))
+     (for/or ([arr (in-list arrs)])
+       (tc/funapp1 f-stx args-stx (subst-all substitution arr)
+                   argtys expected #:check #f))]
     ;; procedural structs
     [((tc-result1: (and sty (Struct: _ _ _ (? Function? proc-ty) _ _))) _)
      (tc/funapp f-stx #`(#,(syntax/loc f-stx dummy) . #,args-stx) (ret proc-ty)

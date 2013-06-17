@@ -19,6 +19,7 @@
          row-constraints
          row-clauses
          infer-row-constraints
+         infer-row
          check-row-constraints
          object-type-clauses
          class-type-clauses)
@@ -128,6 +129,19 @@
          (map list method-names (map inf method-tys)))])]))
   (inf type)
   (map remove-duplicates constraints))
+
+;; infer-row : RowConstraints Type -> Row
+;; Infer a row based on a class type and row constraints
+(define (infer-row constraints class-type)
+  (match-define (list init-cs field-cs method-cs) constraints)
+  (match-define (Class: _ inits fields methods) class-type)
+  (define (dict-remove* dict keys)
+    (for/fold ([dict dict])
+              ([key keys])
+      (dict-remove dict key)))
+  (make-Row (dict-remove* inits init-cs)
+            (dict-remove* fields field-cs)
+            (dict-remove* methods method-cs)))
 
 ;; Syntax -> Syntax
 ;; removes two levels of nesting
