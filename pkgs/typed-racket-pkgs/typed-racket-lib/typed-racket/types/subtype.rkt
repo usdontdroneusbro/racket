@@ -581,6 +581,35 @@
                            [else #f]))))
           (and (subtype-clause? method-map method-map*)
                (subtype-clause? field-map field-map*))]
+         [((Class: row inits fields methods)
+           (Class: row* inits* fields* methods*))
+          ;; check that each of inits, fields, methods, etc. are
+          ;; equal by sorting and checking type equality
+          (define (equal-clause? clause clause* [inits? #f])
+            (define (sort-clause lst)
+              (sort lst string<? #:key (compose symbol->string car)))
+            (let ([clause (sort-clause inits)]
+                  [clause* (sort-clause inits*)])
+              (cond
+               [inits?
+                (match-define (list (list names types) ...) clause)
+                (match-define (list (list names* types*) ...) clause*)
+                (andmap equal? types types*)]
+               [else
+                (match-define (list (list names types opt?) ...)
+                              clause)
+                (match-define (list (list names* types* opt?*) ...)
+                              clause*)
+                (and (andmap equal? types types*)
+                     (andmap equal? opt? opt?*))])))
+          ;; There is no non-trivial subtyping on class types, but it's
+          ;; possible for two "equal" class types to look different
+          ;; in the representation. We deal with that here.
+          (and (or (and (Row? row)) (Row? row*)
+                   (equal? row row*))
+               (equal-clause? inits inits*)
+               (equal-clause? fields fields*)
+               (equal-clause? methods methods*))]
          ;; otherwise, not a subtype
          [(_ _) #f])))
      (when (null? A)
