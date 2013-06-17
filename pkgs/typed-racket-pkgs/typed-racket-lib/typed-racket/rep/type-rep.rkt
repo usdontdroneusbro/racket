@@ -26,11 +26,14 @@
          Values/c SomeValues/c
          Poly-n
          PolyDots-n
+         Class?
          free-vars*
          type-compare type<?
          remove-dups
          sub-f sub-o sub-pe
-         (rename-out [Mu:* Mu:]
+         (rename-out [Class:* Class:]
+                     [*Class make-Class]
+                     [Mu:* Mu:]
                      [Poly:* Poly:]
                      [PolyDots:* PolyDots:]
                      [PolyRow:* PolyRow:]
@@ -493,6 +496,7 @@
                  [inits (listof (list/c symbol? Type/c boolean?))]
                  [fields (listof (list/c symbol? Type/c))]
                  [methods (listof (list/c symbol? Function?))])
+  #:no-provide
   [#:frees (λ (f) (combine-frees
                    ;; FIXME: is this correct?
                    `(,@(or (and (F? row) (list (f row)))
@@ -910,4 +914,34 @@
                          (PolyRow-constraints t)
                          (PolyRow-body* fresh-sym t)))
                  (list np freshp constrp bp)))])))
+
+;; Class:*
+;; This match expander replaces the built-in matching with
+;; a version that will merge the members inside the substituted row
+;; with the existing fields.
+
+;; helper function for the expansion of Class:*
+;; just does the merging
+(define (merge-class/row class-type)
+  (define row (Class-row class-type))
+  (define inits (Class-inits class-type))
+  (define fields (Class-fields class-type))
+  (define methods (Class-methods class-type))
+  (cond [(and row (Row? row))
+         (define row-inits (Row-inits row))
+         (define row-fields (Row-fields row))
+         (define row-methods (Row-methods row))
+         (list row
+               (append inits row-inits)
+               (append fields row-fields)
+               (append methods row-methods))]
+        [else (list row inits fields methods)]))
+
+(define-match-expander Class:*
+  (λ (stx)
+    (syntax-case stx ()
+      [(_ row-pat inits-pat fields-pat methods-pat)
+       #'(? Class?
+            (app merge-class/row
+                 (list row-pat inits-pat fields-pat methods-pat)))])))
 

@@ -773,7 +773,37 @@
     (define (f cls)
       (class: cls (super-new)
         (field [x 5])))
-    (inst f #:row (field [x Integer])))))
+    (inst f #:row (field [x Integer])))
+
+   ;; fails, mixin argument is missing required field
+   (check-err
+    (: f (All (A #:row (field x))
+           ((Class #:row-var A)
+            ->
+            (Class #:row-var A (field [x Integer])))))
+    (define (f cls)
+      (class: cls (super-new)
+        (field [x 5])))
+    (define instantiated
+      (inst f #:row (field [y Integer])))
+    (instantiated
+     (class: object% (super-new))))
+
+   ;; mixin application succeeds
+   (check-ok
+    (: f (All (A #:row (field x))
+           ((Class #:row-var A)
+            ->
+            (Class #:row-var A (field [x Integer])))))
+    (define (f cls)
+      (class: cls (super-new)
+        (field [x 5])))
+    (define instantiated
+      (inst f #:row (field [y Integer])))
+    (instantiated
+     (class: object% (super-new)
+       (: y Integer)
+       (field [y 0]))))))
 
 (define-go class-tests)
 

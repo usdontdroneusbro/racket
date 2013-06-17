@@ -15,7 +15,8 @@
          (only-in unstable/sequence in-syntax)
          (for-template racket/class))
 
-(provide row-constraints
+(provide Class:
+         row-constraints
          row-clauses
          infer-row-constraints
          check-row-constraints
