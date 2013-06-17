@@ -249,11 +249,11 @@
   [#:contract (->i ([constraints (list/c list? list? list?)]
                     [body (scope-depth 1)])
                    (#:syntax [stx (or/c #f syntax?)])
-                   [result Poly?])]
+                   [result PolyRow?])]
   [#:frees (λ (f) (f body))]
   [#:fold-rhs (let ([body* (remove-scopes 1 body)])
-                (*Poly constraints
-                       (add-scopes 1 (type-rec-id body*))))]
+                (*PolyRow constraints
+                          (add-scopes 1 (type-rec-id body*))))]
   [#:key (Type-key body)])
 
 ;; pred : identifier
