@@ -803,7 +803,29 @@
     (instantiated
      (class: object% (super-new)
        (: y Integer)
-       (field [y 0]))))))
+       (field [y 0]))))
+
+   ;; Basic row constraint inference
+   (check-ok
+    (: f (All (A #:row) ; inferred
+           ((Class #:row-var A)
+            ->
+            (Class #:row-var A (field [x Integer])))))
+    (define (f cls)
+      (class: cls (super-new)
+        (field [x 5])))
+    (inst f #:row (field [y Integer])))
+
+   ;; fails, inferred constraint and instantiation don't match
+   (check-err
+    (: f (All (A #:row)
+           ((Class #:row-var A)
+            ->
+            (Class #:row-var A (field [x Integer])))))
+    (define (f cls)
+      (class: cls (super-new)
+        (field [x 5])))
+    (inst f #:row (field [x Integer])))))
 
 (define-go class-tests)
 

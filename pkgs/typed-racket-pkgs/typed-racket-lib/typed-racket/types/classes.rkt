@@ -4,7 +4,7 @@
 ;; working with class/object types and rows
 
 (require "../utils/utils.rkt"
-         (rep type-rep)
+         (rep type-rep rep-utils)
          (except-in racket/class private)
          racket/dict
          racket/list
@@ -100,9 +100,34 @@
 
 ;; Type -> RowConstraint
 ;; Infer constraints on a row for a row polymorphic function
-;; TODO
 (define (infer-row-constraints type)
-  (list null null null))
+  (define constraints (list null null null))
+  ;; Crawl the type tree and mutate constraints when a
+  ;; class type with row variable is found.
+  (define (inf type)
+    (type-case
+     (#:Type inf #:Filter (sub-f inf) #:Object (sub-o inf))
+     type
+     [#:Class row inits fields methods
+      (cond
+       [(and row (F? row))
+        (match-define (list init-cs field-cs method-cs) constraints)
+        (set! constraints
+              (list (append (dict-keys inits) init-cs)
+                    (append (dict-keys fields) field-cs)
+                    (append (dict-keys methods) method-cs)))
+        (make-Class row inits fields methods)]
+       [else
+        (match-define (list (list init-names init-tys init-reqds) ...) inits)
+        (match-define (list (list field-names field-tys) ...) fields)
+        (match-define (list (list method-names method-tys) ...) methods)
+        (make-Class
+         (and row (inf row))
+         (map list init-names (map inf init-tys) init-reqds)
+         (map list field-names (map inf field-tys))
+         (map list method-names (map inf method-tys)))])]))
+  (inf type)
+  (map remove-duplicates constraints))
 
 ;; Syntax -> Syntax
 ;; removes two levels of nesting
