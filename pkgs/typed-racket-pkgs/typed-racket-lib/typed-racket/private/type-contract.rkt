@@ -399,7 +399,7 @@
         ;; TODO
         [(F: v) (cond [(assoc v (vars)) => second]
                       [else (int-err "unknown var: ~a" v)])]
-        [(Poly: vs b)
+        [(or (Poly: vs b) (PolyRow: (app (λ (v) (list v)) vs) _ b))
          ;; Don't generate poly contracts for non-functions
          (define function-type?
            (let loop ([ty ty])
@@ -415,8 +415,9 @@
              ;; in typed positions, no checking needed for the variables
              (parameterize ([vars (append (for/list ([v (in-list vs)]) (list v #'any/c)) (vars))])
                (t->c b))
-             ;; in untyped positions, use `parametric->/c'
-             (match-let ([(Poly-names: vs-nm _) ty])
+             ;; in untyped positions, use `parameteric/c'
+             (match-let ([(or (Poly-names: vs-nm _)
+                              (PolyRow-names: (app (λ (v) (list v)) vs-nm) _ _)) ty])
                (with-syntax ([(v ...) (generate-temporaries vs-nm)])
                  (set-impersonator!)
                  (parameterize ([vars (append (stx-map list vs #'(v ...))
