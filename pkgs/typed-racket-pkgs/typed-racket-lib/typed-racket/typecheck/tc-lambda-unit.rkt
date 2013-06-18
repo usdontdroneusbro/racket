@@ -456,7 +456,7 @@
          [else
            (tc-error "Expected a polymorphic function with ..., but function/annotation had no ...")]))
      (make-PolyDots (append ns (list dvar)) (extend-and-loop form ns formals bodies (ret expected*)))]
-    [(tc-result1: (and t (PolyRow-fresh: n fresh-n constraints expected*)))
+    [(tc-result1: (and t (PolyRow-fresh: ns fresh-ns constraints expected*)))
      (for ((tvars (in-list tvarss)))
        (when (and (cons? tvars) (list? (first tvars)))
          (tc-error
@@ -465,10 +465,10 @@
          (tc-error "Expected ~a type variable, but given ~a"
                    1 (length tvars))))
      (make-PolyRow
-      #:original-name n
-      fresh-n
+      #:original-name ns
+      fresh-ns
       constraints
-      (extend-and-loop form (list fresh-n)
+      (extend-and-loop form fresh-ns
                        formals bodies (ret expected*)))]
     [(or (tc-results: _) (tc-any-results:) #f)
      (define lengths

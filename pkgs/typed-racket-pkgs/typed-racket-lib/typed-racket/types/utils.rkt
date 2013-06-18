@@ -40,8 +40,8 @@
             [body* (subst-all (make-simple-substitution fixed fixed-tys)
                               body)])
        (substitute-dots rest-tys #f dotted body*))]
-    [(PolyRow: name _ body)
-     (subst-all (make-simple-substitution (list name) types) body)]
+    [(PolyRow: names _ body)
+     (subst-all (make-simple-substitution names types) body)]
     [_ (int-err "instantiate-poly: requires Poly type, got ~a" t)]))
 
 (define (instantiate-poly-dotted t types image var)

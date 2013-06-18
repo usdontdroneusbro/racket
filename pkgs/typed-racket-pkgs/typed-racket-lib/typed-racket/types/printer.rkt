@@ -379,8 +379,8 @@
     [(PolyDots-names: (list names ... dotted) body)
      (fp "(All ~a ~a)" (append names (list dotted '...)) body)]
     ;; FIXME: should this print constraints too
-    [(PolyRow-names: name _ body)
-     (fp "(All (~a #:row) ~a)" name body)]
+    [(PolyRow-names: names _ body)
+     (fp "(All (~a #:row) ~a)" (car names) body)]
     #;
     [(Mu-unsafe: b) (fp "(unsafe-mu ~a ~a)" (Type-seq c) b)]
     [(Mu: x (Syntax: (Union: (list

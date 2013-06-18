@@ -117,23 +117,27 @@
     ;; the Racket codebase. Eventually this should be extended.
     [((tc-result1:
        (and t (PolyRow:
-               var
+               vars
                constraints
                (Function: (list (and arrs (arr: doms rngs rests (and drests #f)
                                                 (list (Keyword: _ _ kw?) ...)))
                                 ...)))))
       (list (tc-result1: argtys-t) ...))
+     (define (fail)
+       (poly-fail f-stx args-stx t argtys
+                  #:name (and (identifier? f-stx) f-stx)
+                  #:expected expected))
      ;; only infer if there's 1 argument
      (for ([dom doms])
        (unless (and (= 1 (length argtys-t) (length dom)))
-         (poly-fail f-stx args-stx t argtys
-                        #:name (and (identifier? f-stx) f-stx)
-                        #:expected expected)))
-     (define substitution
-       (hash var (t-subst (infer-row constraints (car argtys-t)))))
-     (for/or ([arr (in-list arrs)])
-       (tc/funapp1 f-stx args-stx (subst-all substitution arr)
-                   argtys expected #:check #f))]
+         (fail)))
+     (cond [(Class? (car argtys-t))
+            (define substitution
+              (hash (car vars) (t-subst (infer-row constraints (car argtys-t)))))
+            (for/or ([arr (in-list arrs)])
+              (tc/funapp1 f-stx args-stx (subst-all substitution arr)
+                          argtys expected #:check #t))]
+           [else (fail)])]
     ;; procedural structs
     [((tc-result1: (and sty (Struct: _ _ _ (? Function? proc-ty) _ _))) _)
      (tc/funapp f-stx #`(#,(syntax/loc f-stx dummy) . #,args-stx) (ret proc-ty)

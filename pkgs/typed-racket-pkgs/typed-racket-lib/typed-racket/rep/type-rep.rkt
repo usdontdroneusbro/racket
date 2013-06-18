@@ -757,9 +757,14 @@
        (int-err "Wrong number of names: expected ~a got ~a" n (length names)))
      (instantiate-many (map *F names) scope)]))
 
-;; constructor and destructor for row polymorphism
-(define (PolyRow* name constraints body #:original-name [orig name])
-  (let ([v (*PolyRow constraints (abstract-many (list name) body))])
+;; Constructor and destructor for row polymorphism
+;;
+;; Note that while `names` lets you specify multiple names, it's
+;; expected that row polymorphic types only bind a single name at
+;; a time. This may change in the future.
+;;
+(define (PolyRow* names constraints body #:original-name [orig names])
+  (let ([v (*PolyRow constraints (abstract-many names body))])
     (hash-set! name-table v orig)
     v))
 
@@ -885,7 +890,7 @@
        #'(? PolyRow?
             (app (lambda (t)
                    (define sym (gensym))
-                   (list sym
+                   (list (list sym)
                          (PolyRow-constraints t)
                          (PolyRow-body* sym t)))
                  (list np constrp bp)))])))
@@ -897,7 +902,7 @@
        #'(? PolyRow?
             (app (lambda (t)
                    (define sym (hash-ref name-table t (λ _ (gensym))))
-                   (list sym
+                   (list (list sym)
                          (PolyRow-constraints t)
                          (PolyRow-body* sym t)))
                  (list np constrp bp)))])))
@@ -910,7 +915,7 @@
             (app (lambda (t)
                    (define sym (hash-ref name-table t (λ _ (gensym))))
                    (define fresh-sym (gensym sym))
-                   (list sym fresh-sym
+                   (list (list sym) (list fresh-sym)
                          (PolyRow-constraints t)
                          (PolyRow-body* fresh-sym t)))
                  (list np freshp constrp bp)))])))

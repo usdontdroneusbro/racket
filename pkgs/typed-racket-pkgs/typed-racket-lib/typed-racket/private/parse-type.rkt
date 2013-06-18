@@ -94,7 +94,7 @@
      (define body-type
        (extend-tvars (list var*) (parse-type #'t.type)))
      (make-PolyRow
-      var*
+      (list var*)
       ;; No constraints listed, so we need to infer the constraints
       (infer-row-constraints body-type)
       body-type)]
@@ -103,7 +103,7 @@
      (define var* (syntax-e #'var))
      (extend-tvars (list var*)
        (make-PolyRow
-        var*
+        (list var*)
         (attribute constr.constraints)
         (parse-type #'t.type)))]
     [(t:All (_:id ...) _ _ _ ...) (tc-error "All: too many forms in body of All type")]
