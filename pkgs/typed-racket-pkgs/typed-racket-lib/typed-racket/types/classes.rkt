@@ -5,6 +5,7 @@
 
 (require "../utils/utils.rkt"
          (rep type-rep rep-utils)
+         (types resolve)
          (except-in racket/class private)
          racket/dict
          racket/list
@@ -134,7 +135,8 @@
 ;; Infer a row based on a class type and row constraints
 (define (infer-row constraints class-type)
   (match-define (list init-cs field-cs method-cs) constraints)
-  (match-define (Class: _ inits fields methods) class-type)
+  (match-define (Class: _ inits fields methods)
+                (resolve class-type))
   (define (dict-remove* dict keys)
     (for/fold ([dict dict])
               ([key keys])
