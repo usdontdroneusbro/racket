@@ -280,5 +280,5 @@
   (syntax-rules ()
     [(_ (var) consts ty)
      (let ([var (-v var)])
-       (make-PolyRow 'var consts ty))]))
+       (make-PolyRow (list 'var) consts ty))]))
 

@@ -168,15 +168,15 @@
    [FAIL (Class (field [x Number]) (init-field [x Number]))]
    ;; test #:row-var
    [(All (r #:row) (Class #:row-var r))
-    (make-PolyRow 'r
+    (make-PolyRow (list 'r)
                   (list null null null)
                   (make-Class (make-F 'r) null null null))]
    [(All (r #:row) (Class #:implements (Class #:row-var r)))
-    (make-PolyRow 'r
+    (make-PolyRow (list 'r)
                   (list null null null)
                   (make-Class (make-F 'r) null null null))]
    [(All (r #:row) (Class #:implements (Class) #:row-var r))
-    (make-PolyRow 'r
+    (make-PolyRow (list 'r)
                   (list null null null)
                   (make-Class (make-F 'r) null null null))]
    [FAIL (Class #:row-var 5)]
