@@ -492,7 +492,7 @@
 ;;         The remainder are the types for public fields and
 ;;         public methods, respectively.
 ;;
-(def-type Class ([row (or/c #f F? Row?)]
+(def-type Class ([row (or/c #f F? B? Row?)]
                  [inits (listof (list/c symbol? Type/c boolean?))]
                  [fields (listof (list/c symbol? Type/c))]
                  [methods (listof (list/c symbol? Function?))])
@@ -763,15 +763,15 @@
 ;; expected that row polymorphic types only bind a single name at
 ;; a time. This may change in the future.
 ;;
-(define (PolyRow* names constraints body #:original-name [orig names])
+(define (PolyRow* names constraints body #:original-names [orig names])
   (let ([v (*PolyRow constraints (abstract-many names body))])
     (hash-set! name-table v orig)
     v))
 
-(define (PolyRow-body* name t)
+(define (PolyRow-body* names t)
   (match t
     [(PolyRow: constraints scope)
-     (instantiate-many (list (*F name)) scope)]))
+     (instantiate-many (map *F names) scope)]))
 
 (print-struct #t)
 
@@ -886,39 +886,39 @@
 (define-match-expander PolyRow:*
   (lambda (stx)
     (syntax-case stx ()
-      [(_ np constrp bp)
+      [(_ nps constrp bp)
        #'(? PolyRow?
             (app (lambda (t)
                    (define sym (gensym))
                    (list (list sym)
                          (PolyRow-constraints t)
-                         (PolyRow-body* sym t)))
-                 (list np constrp bp)))])))
+                         (PolyRow-body* (list sym) t)))
+                 (list nps constrp bp)))])))
 
 (define-match-expander PolyRow-names:
   (lambda (stx)
     (syntax-case stx ()
-      [(_ np constrp bp)
+      [(_ nps constrp bp)
        #'(? PolyRow?
             (app (lambda (t)
-                   (define sym (hash-ref name-table t (λ _ (gensym))))
-                   (list (list sym)
+                   (define syms (hash-ref name-table t (λ _ (list (gensym)))))
+                   (list syms
                          (PolyRow-constraints t)
-                         (PolyRow-body* sym t)))
-                 (list np constrp bp)))])))
+                         (PolyRow-body* syms t)))
+                 (list nps constrp bp)))])))
 
 (define-match-expander PolyRow-fresh:
   (lambda (stx)
     (syntax-case stx ()
-      [(_ np freshp constrp bp)
+      [(_ nps freshp constrp bp)
        #'(? PolyRow?
             (app (lambda (t)
-                   (define sym (hash-ref name-table t (λ _ (gensym))))
-                   (define fresh-sym (gensym sym))
-                   (list (list sym) (list fresh-sym)
+                   (define syms (hash-ref name-table t (λ _ (list (gensym)))))
+                   (define fresh-syms (list (gensym (car syms))))
+                   (list syms fresh-syms
                          (PolyRow-constraints t)
-                         (PolyRow-body* fresh-sym t)))
-                 (list np freshp constrp bp)))])))
+                         (PolyRow-body* fresh-syms t)))
+                 (list nps freshp constrp bp)))])))
 
 ;; Class:*
 ;; This match expander replaces the built-in matching with

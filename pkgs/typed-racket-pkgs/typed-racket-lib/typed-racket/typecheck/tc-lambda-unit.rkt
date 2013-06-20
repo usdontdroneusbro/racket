@@ -465,7 +465,7 @@
          (tc-error "Expected ~a type variable, but given ~a"
                    1 (length tvars))))
      (make-PolyRow
-      #:original-name ns
+      #:original-names ns
       fresh-ns
       constraints
       (extend-and-loop form fresh-ns

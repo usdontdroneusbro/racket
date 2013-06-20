@@ -41,6 +41,9 @@
                               body)])
        (substitute-dots rest-tys #f dotted body*))]
     [(PolyRow: names _ body)
+     (unless (= (length types) (length names))
+       (int-err "instantiate-poly: wrong number of types: expected ~a, got ~a"
+                (length names) (length types)))
      (subst-all (make-simple-substitution names types) body)]
     [_ (int-err "instantiate-poly: requires Poly type, got ~a" t)]))
 

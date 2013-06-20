@@ -134,9 +134,10 @@
      (cond [(Class? (car argtys-t))
             (define substitution
               (hash (car vars) (t-subst (infer-row constraints (car argtys-t)))))
-            (for/or ([arr (in-list arrs)])
-              (tc/funapp1 f-stx args-stx (subst-all substitution arr)
-                          argtys expected #:check #t))]
+            (or (for/or ([arr (in-list arrs)])
+                  (tc/funapp1 f-stx args-stx (subst-all substitution arr)
+                              argtys expected #:check #f))
+                (fail))]
            [else (fail)])]
     ;; procedural structs
     [((tc-result1: (and sty (Struct: _ _ _ (? Function? proc-ty) _ _))) _)
