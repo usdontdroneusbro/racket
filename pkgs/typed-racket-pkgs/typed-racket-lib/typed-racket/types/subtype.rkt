@@ -588,26 +588,31 @@
           (define (equal-clause? clause clause* [inits? #f])
             (define (sort-clause lst)
               (sort lst string<? #:key (compose symbol->string car)))
-            (let ([clause (sort-clause inits)]
-                  [clause* (sort-clause inits*)])
+            (let ([clause (sort-clause clause)]
+                  [clause* (sort-clause clause*)])
               (cond
-               [inits?
+               [(not inits?)
                 (match-define (list (list names types) ...) clause)
                 (match-define (list (list names* types*) ...) clause*)
-                (andmap equal? types types*)]
+                (and (= (length names) (length names*))
+                     (andmap equal? names names*)
+                     (andmap equal? types types*))]
                [else
                 (match-define (list (list names types opt?) ...)
                               clause)
                 (match-define (list (list names* types* opt?*) ...)
                               clause*)
-                (and (andmap equal? types types*)
+                (and (= (length names) (length names*))
+                     (andmap equal? names names*)
+                     (andmap equal? types types*)
                      (andmap equal? opt? opt?*))])))
           ;; There is no non-trivial subtyping on class types, but it's
           ;; possible for two "equal" class types to look different
           ;; in the representation. We deal with that here.
-          (and (or (and (Row? row)) (Row? row*)
+          (and (or (and (or (Row? row) (not row))
+                        (or (Row? row*) (not row*)))
                    (equal? row row*))
-               (equal-clause? inits inits*)
+               (equal-clause? inits inits* #t)
                (equal-clause? fields fields*)
                (equal-clause? methods methods*))]
          ;; otherwise, not a subtype
