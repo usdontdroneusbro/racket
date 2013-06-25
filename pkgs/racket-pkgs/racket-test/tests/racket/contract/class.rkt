@@ -1767,5 +1767,72 @@
   (contract-error-test
    'not-a-class-1
    '(contract (class/c) 3 'pos 'neg)
-   expected-class)))
+   expected-class))
+
+;; sealing class contracts
+(test/pos-blame
+ 'seal/c-1
+ '(contract (new-seal/c () () ())
+            object%
+            'pos 'neg))
+
+(test/pos-blame
+ 'seal/c-2
+ '(let ()
+    (define s (new-seal/c () () (m)))
+    (define f/c (-> s s))
+    (define f (contract f/c
+                        (λ (cls)
+                          (class cls
+                            (super-new)
+                            (define/public (n) 0)))
+                        'pos 'neg))
+    (f object%)))
+
+(test/pos-blame
+ 'seal/c-3
+ '(let ()
+    (define s (new-seal/c () () (m)))
+    (define f/c (-> s s))
+    (define f (contract f/c
+                        (λ (cls) (new cls))
+                        'pos 'neg))
+    (f object%)))
+
+(test/pos-blame
+ 'seal/c-4
+ '(let ()
+    (define s (new-seal/c () () (m)))
+    (define f/c (-> s s))
+    (define f (contract f/c
+                        (λ (cls) object%)
+                        'pos 'neg))
+    (f object%)))
+
+(test/spec-passed
+ 'seal/c-5
+ '(let ()
+    (define s (new-seal/c () () (m)))
+    (define f/c (-> s s))
+    (define f (contract f/c
+                        (λ (cls)
+                          (class cls
+                            (super-new)
+                            (define/public (m) 0)))
+                        'pos 'neg))
+    (f object%))))
+
+(test/spec-passed
+ 'seal/c-6
+ '(let ()
+    (define s (new-seal/c () () (m)))
+    (define f/c (-> (and/c s (class/c))
+                    (and/c (class/c) s)))
+    (define f (contract f/c
+                        (λ (cls)
+                          (class cls
+                            (super-new)
+                            (define/public (m) 0)))
+                        'pos 'neg))
+    (f object%)))
 
