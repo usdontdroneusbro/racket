@@ -2154,6 +2154,37 @@ Returns a flat contract that recognizes classes that
 are subclasses of @racket[class].}
 
 
+@defform[(new-seal/c (init-exception ...)
+                     (field-exception ...)
+                     (method-exception ...))
+         #:contracts ([init-exception identifier?]
+                      [field-exception identifier?]
+                      [method-exception identifier?])]{
+Returns an impersonator contract that accepts a class value
+and either seals or unseals the class. When a class is sealed,
+it cannot be instantiated via @racket[new], @racket[make-object],
+or @racket[instantiate].
+Furthermore, no initialization arguments, fields, or methods may
+be added to subclasses of the given class except those exceptions
+specified in the contract.
+
+A sealing contract will also accept sealed classes that were
+previously sealed by the same contract and unseal it. Multiple
+sealing contracts may be in effect for any given
+class and all seals must be removed in order for the class to
+be instantiated.
+
+Whether a sealing contract will seal or unseal is determined by
+whether it occurs in negative positions (e.g., function inputs)
+or positive positions (e.g., function outputs) respectively.
+
+This contract form is intended for use with mixins, in order to
+ensure that a mixin returns a subclass of its input whose additional
+initialization arguments, fields, or methods are only those
+specified as exceptions.
+}
+
+
 @; ------------------------------------------------------------------------
 
 @section[#:tag "objectequality"]{Object Equality and Hashing}

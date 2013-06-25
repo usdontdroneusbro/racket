@@ -64,6 +64,7 @@
            (struct-out exn:fail:object)
            make-primitive-class
            class/c ->m ->*m ->dm case->m object/c instanceof/c
+           new-seal/c
            
            ;; "keywords":
            private public override augment
@@ -1955,6 +1956,8 @@
                       [ictc-classes  ; #f or weak hash of cached classes keyed by blame
                        #:mutable]
 
+                      seals          ; seals for sealing contracts (#f or list)
+
                       methods        ; vector of methods (for external dynamic dispatch)
                                      ; vector might also contain lists; see comment below from Stevie
                       super-methods  ; vector of methods (for subclass super calls)
@@ -2104,7 +2107,36 @@ last few projections.
                                 augment-names augment-final-names augride-normal-names
                                 abstract-names)
                         "method names"))
-  
+
+  ;; -- Run sealing contract checkers --
+  (define seals (class-seals super))
+  (when seals
+    (define all-inits init-args)
+    (define all-fields (append public-field-names
+                               inherit-field-names))
+    (define all-methods (append rename-super-names
+                                rename-inner-names
+                                pubment-names
+                                public-final-names
+                                public-normal-names
+                                overment-names
+                                override-final-names
+                                override-normal-names
+                                augment-names
+                                augment-final-names
+                                augride-normal-names
+                                inherit-names
+                                abstract-names))
+    (define all-init-checkers
+      (map (λ (p) (list-ref p 2)) seals))
+    (define all-field-checkers
+      (map (λ (p) (list-ref p 3)) seals))
+    (define all-method-checkers
+      (map (λ (p) (list-ref p 4)) seals))
+    (for ([f all-init-checkers]) (f all-inits))
+    (for ([f all-field-checkers]) (f all-fields))
+    (for ([f all-method-checkers]) (f all-methods)))
+
   ;; -- Create new class's name --
   (let* ([name (or name
                    (let ([s (class-name super)])
@@ -2297,6 +2329,7 @@ last few projections.
                                 method-width method-ht method-names remaining-abstract-names
                                 (interfaces->contracted-methods (list i))
                                 #f
+                                (class-seals super) ; seals are inherited from parent
                                 methods super-methods int-methods beta-methods meth-flags
                                 inner-projs dynamic-idxs dynamic-projs
                                 field-width field-pub-width field-ht field-names
@@ -3040,7 +3073,7 @@ An example
                             (class-abstract-ids cls)
                             (remq* ctc-methods method-ictcs)
                             
-                            #f
+                            #f #f ; interface contract cache and seals
                             
                             methods
                             super-methods
@@ -3719,6 +3752,93 @@ An example
   (let ([ctc (coerce-contract 'instanceof/c cctc)])
     (make-base-instanceof/c ctc)))
 
+;; sealing contracts
+(define-syntax-rule (new-seal/c (i ...) (f ...) (m ...))
+  (seal/c '(seal/c)
+          (gensym)
+          (list (list (quote i) ...)
+                (list (quote f) ...)
+                (list (quote m) ...))))
+
+;; name : S-Exp
+;; seal-sym : Symbol
+;; unsealed : (List Listof<Sym> Listof<Sym> Listof<Sym>)
+;;
+;; interp.
+;;   name - name of the contract
+;;   seal-sym - uninterned symbol used for sealing
+;;   unsealed - inits, fields, methods that are unsealed
+(struct seal/c (name seal-sym unsealed)
+  #:property prop:contract
+  (build-contract-property
+   #:name (λ (c) (seal/c-name c))
+   #:first-order (λ (c) (class? c))
+   #:projection
+   (λ (c)
+     (λ (blame)
+       (define seal-sym (seal/c-seal-sym c))
+       (define unsealed (seal/c-unsealed c))
+       (if (blame-original? blame)
+           (do-unseal blame seal-sym)
+           (do-seal blame seal-sym unsealed))))))
+
+;; Blame Symbol -> Class -> Class
+;; Do the actual sealing by creating a new class
+(define ((do-seal blame seal-sym unsealed) cls)
+  (unless (class? cls)
+    (raise-blame-error blame cls
+                       '(expected: "class?" given: "~e")
+                       cls))
+  (define swapped-blame (blame-swap blame))
+  ;; These check that no sealed names are used for
+  ;; inits, fields, and methods respectively
+  (define checkers
+    (list (make-new-error-proc swapped-blame)
+          (make-seal-checker swapped-blame class (car unsealed))
+          (make-seal-checker swapped-blame class (cadr unsealed))
+          (make-seal-checker swapped-blame class (caddr unsealed))))
+  ;; FIXME: what if a checker already exists? run them
+  ;;        one after another?
+  (define seals (cons (cons seal-sym checkers)
+                      (or (class-seals cls) null)))
+  (make-wrapper-class cls blame null null
+                      null null #:seals seals))
+
+;; Blame Class Listof<Symbol> -> Listof<Symbol> -> Void
+;; Raise a blame error if sealed class is instantiated
+(define ((make-new-error-proc blame) cls)
+  (raise-blame-error
+   blame cls
+   "class with sealing contract cannot be instantiated"))
+
+;; Blame Class Listof<Symbol> -> Listof<Symbol> -> Void
+;; Generate a checker for the given names
+(define ((make-seal-checker blame cls unsealed) actual)
+  (define sealed-actuals (remove* unsealed actual))
+  (unless (null? sealed-actuals)
+    (raise-blame-error
+     blame cls
+     "cannot define sealed class names ~a"
+     sealed-actuals)))
+
+;; Blame Symbol -> Class -> Class
+;; Unseal the class, raising a blame error if the class
+;; wasn't ever sealed with the given seal symbol
+(define ((do-unseal blame sym) cls)
+  (unless (class? cls)
+    (raise-blame-error blame cls
+                       '(expected: "class?" given: "~e")
+                       cls))
+  (define old-seals (class-seals cls))
+  (define seal-with-sym (and old-seals (assq sym old-seals)))
+  (unless seal-with-sym
+    (raise-blame-error blame cls
+                       '(expected: "matching sealed class" given: "~e")
+                       cls))
+  (define new-seals (remove seal-with-sym (class-seals cls)))
+  (make-wrapper-class cls blame null null
+                      null null #:seals new-seals))
+
 ;;--------------------------------------------------------------------
 ;;  interfaces
 ;;--------------------------------------------------------------------
@@ -3929,7 +4049,7 @@ An example
                  void ; never inspectable
                  
                  0 (make-hasheq) null null null
-                 #f
+                 #f #f
                  (vector) (vector) (vector) (vector) (vector)
 
                  (vector) (vector) (vector)
@@ -4082,7 +4202,7 @@ An example
                                null
                                null
 
-                               #f
+                               #f #f
 
                                meths
                                (class-super-methods cls)
@@ -4188,6 +4308,9 @@ An example
                "cannot instantiate class with abstract methods"
                "class" class
                "abstract methods" (as-write-list (class-abstract-ids class))))
+  ;; if the class is sealed, run the stored error procedure
+  (let ([seals (class-seals class)])
+    (when seals ((cadr (car seals)) class)))
   ;; Generate correct class by concretizing methods w/interface ctcs
   (define concrete-class (fetch-concrete-class class blame))
   (define o ((class-make-object concrete-class)))
@@ -5098,7 +5221,8 @@ An example
 ;;  wrapper for contracts
 ;;--------------------------------------------------------------------
 
-(define (make-wrapper-class cls blame methods method-contracts fields field-contracts)
+(define (make-wrapper-class cls blame methods method-contracts fields field-contracts
+                            #:seals [seals #f])
   (let* ([name (class-name cls)]
          [method-width (class-method-width cls)]
          [method-ht (class-method-ht cls)]
@@ -5125,7 +5249,10 @@ An example
                         (class-method-ictcs cls)
 
                         (class-ictc-classes cls)
-                        
+
+                        (or (and (not seals) (class-seals cls))
+                            seals)
+
                         meths
                         (class-super-methods cls)
                         (class-int-methods cls)
@@ -5574,4 +5701,5 @@ An example
          make-class/c class/c-proj
          (struct-out wrapped-class) (struct-out wrapped-class-info) (struct-out wrapped-object)
          blame-add-method-context blame-add-init-context
-         class/c ->m ->*m ->dm case->m object/c instanceof/c)
+         class/c ->m ->*m ->dm case->m object/c instanceof/c
+         new-seal/c)
