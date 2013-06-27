@@ -23,8 +23,10 @@
                (prefix-in t: (types numeric-predicates))
                (only-in unstable/contract sequence/c)
                (only-in racket/class object% is-a?/c subclass?/c
-                        object-contract class/c init object/c class?
-                        instanceof/c new-seal/c)))
+                        object-contract class/c object/c class?
+                        instanceof/c new-seal/c
+                        init override inherit super augment
+                        augride inner)))
 
 ;; These check if either the define form or the body form has the syntax
 ;; property. Normally the define form will have the property but lifting an
@@ -457,25 +459,47 @@
          (t->c t)]
         [(Instance: (? Mu? t))
          #`(instanceof/c #,(t->c t))]
-        [(Instance: (Class: _ _ _ (list (list name fcn) ...)))
+        [(Instance: (Class: _ _ _
+                            (list (list name fcn) ...)
+                            (list (list aug-name aug-fcn) ...)))
          (set-impersonator!)
          (with-syntax ([(fcn-cnts ...) (for/list ([f (in-list fcn)]) (t->c/fun f #:method #t))]
-                       [(names ...) name])
-           #'(object/c (names fcn-cnts) ...))]
+                       [(aug-fcn-cnts ...)
+                        (for/list ([f (in-list aug-fcn)]) (t->c/fun f #:method #t))]
+                       [(names ...) name]
+                       [(aug-names ...) aug-name])
+           #'(object/c (names fcn-cnts) ...
+                       (aug-names aug-fcn-cnts) ...))]
         ;; init args not currently handled by class/c
         [(Class: row-var
                  (list (list by-name-init by-name-init-ty _) ...)
                  fields
-                 (list (list name fcn) ...))
+                 (list (list name fcn) ...)
+                 (list (list aug-name aug-fcn) ...))
          (set-impersonator!)
+         ;; Only apply a sealing contract if the type actually has
+         ;; a row variable. In that case, look up the contract from
+         ;; the vars parameter.
          (define seal/c
            (and (F? row-var) (second (assoc (F-n row-var) (vars)))))
          (with-syntax ([(fcn-cnt ...) (for/list ([f (in-list fcn)]) (t->c/fun f #:method #t))]
+                       [(aug-fcn-cnt ...)
+                        (for/list ([f (in-list aug-fcn)])
+                          (t->c/fun f #:method #t))]
                        [(name ...) name]
+                       [(aug-name ...) aug-name]
                        [(by-name-cnt ...) (for/list ([t (in-list by-name-init-ty)]) (t->c/neg t))]
                        [(by-name-init ...) by-name-init])
            (define class/c-stx
-             #'(class/c (name fcn-cnt) ... (init [by-name-init by-name-cnt] ...)))
+             #'(class/c
+                (init [by-name-init by-name-cnt] ...)
+                (name fcn-cnt) ...
+                (aug-name aug-fcn-cnt) ...
+                (inherit [name fcn-cnt]) ...
+                (super [name fcn-cnt]) ...
+                (inner [aug-name aug-fcn-cnt]) ...
+                (override [name fcn-cnt]) ...
+                (augment [aug-name aug-fcn-cnt]) ...))
            (if seal/c
                #`(and/c #,seal/c #,class/c-stx)
                class/c-stx))]

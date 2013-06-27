@@ -235,7 +235,8 @@
 ;; print-class-type : Type (Any ... -> Void) -> String
 ;; Print a class or object type
 (define (print-class-type type fp #:object? [object? #f])
-  (match-define (Class: row-var inits fields methods) type)
+  (match-define (Class: row-var inits fields methods augments)
+                type)
   ;; replace booleans with keyword or nothing in inits
   (define (transform-inits)
     (cons 'init
@@ -252,7 +253,10 @@
         ,@(if (or object? (null? inits))
               '()
               (list (transform-inits)))
-        ,@(if (null? fields) '() (list (cons 'fields fields)))
+        ,@(if (null? fields) '() (list (cons 'field fields)))
+        ,@(cond [(null? augments) '()]
+                [object? augments]
+                [else (list (cons 'augment augments))])
         ,@methods)))
 
 ;; print out a type
