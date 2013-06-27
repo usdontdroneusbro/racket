@@ -581,13 +581,14 @@
 
 (define status-line-mixin
   (mixin (basic<%>) (status-line<%>)
-    (field [status-line-container-panel #f]
-           
-           ;; status-lines : (listof status-line)
-           [status-lines null]
-           
-           ;; status-line-msgs : (listof status-line-msg)
-           [status-line-msgs null])
+    (define status-line-container-panel #f)
+
+    ;; status-lines : (listof status-line)
+    (define status-lines null)
+
+    ;; status-line-msgs : (listof status-line-msg)
+    (define status-line-msgs null)
+
     (define/override (make-root-area-container % parent)
       (let* ([s-root (super make-root-area-container vertical-panel% parent)]
              [r-root (make-object % s-root)])
