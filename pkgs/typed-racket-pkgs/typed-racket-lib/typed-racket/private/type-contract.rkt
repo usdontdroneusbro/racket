@@ -24,7 +24,7 @@
                (only-in unstable/contract sequence/c)
                (only-in racket/class object% is-a?/c subclass?/c
                         object-contract class/c init object/c class?
-                        instanceof/c)))
+                        instanceof/c new-seal/c)))
 
 ;; These check if either the define form or the body form has the syntax
 ;; property. Normally the define form will have the property but lifting an
@@ -399,7 +399,7 @@
         ;; TODO
         [(F: v) (cond [(assoc v (vars)) => second]
                       [else (int-err "unknown var: ~a" v)])]
-        [(or (Poly: vs b) (PolyRow: vs _ b))
+        [(Poly: vs b)
          ;; Don't generate poly contracts for non-functions
          (define function-type?
            (let loop ([ty ty])
@@ -416,13 +416,31 @@
              (parameterize ([vars (append (for/list ([v (in-list vs)]) (list v #'any/c)) (vars))])
                (t->c b))
              ;; in untyped positions, use `parameteric/c'
-             (match-let ([(or (Poly-names: vs-nm _)
-                              (PolyRow-names: vs-nm _ _)) ty])
+             (match-let ([(Poly-names: vs-nm _) ty])
                (with-syntax ([(v ...) (generate-temporaries vs-nm)])
                  (set-impersonator!)
                  (parameterize ([vars (append (stx-map list vs #'(v ...))
                                               (vars))])
                    #`(parametric->/c (v ...) #,(t->c b))))))]
+        [(PolyRow: vs _ b)
+         (cond [(not (from-untyped? typed-side))
+                ;; see Poly
+                (parameterize ([vars (append (for/list ([v (in-list vs)])
+                                               (list v #'any/c))
+                                             (vars))])
+                  (t->c b))]
+               [else
+                ;; extend row constraints and let Class contract
+                ;; generation figure out whether to use sealing or
+                ;; unsealing
+                (match-define (PolyRow-names: vs-nm constraints _) ty)
+                (define/with-syntax seal/c (generate-temporary))
+                (set-impersonator!)
+                (parameterize ([vars (cons (list (car vs) #'seal/c) (vars))])
+                  #`(let ([seal/c (new-seal/c #,(car constraints)
+                                              #,(cadr constraints)
+                                              #,(caddr constraints))])
+                      #,(t->c b)))])]
         [(Mu: n b)
          (match-let ([(Mu-name: n-nm _) ty])
            (with-syntax ([(n*) (generate-temporaries (list n-nm))])
@@ -445,14 +463,22 @@
                        [(names ...) name])
            #'(object/c (names fcn-cnts) ...))]
         ;; init args not currently handled by class/c
-        [(Class: _ (list (list by-name-init by-name-init-ty _) ...)
-                 fields (list (list name fcn) ...))
+        [(Class: row-var
+                 (list (list by-name-init by-name-init-ty _) ...)
+                 fields
+                 (list (list name fcn) ...))
          (set-impersonator!)
+         (define seal/c
+           (and (F? row-var) (second (assoc (F-n row-var) (vars)))))
          (with-syntax ([(fcn-cnt ...) (for/list ([f (in-list fcn)]) (t->c/fun f #:method #t))]
                        [(name ...) name]
                        [(by-name-cnt ...) (for/list ([t (in-list by-name-init-ty)]) (t->c/neg t))]
                        [(by-name-init ...) by-name-init])
-           #'(class/c (name fcn-cnt) ... (init [by-name-init by-name-cnt] ...)))]
+           (define class/c-stx
+             #'(class/c (name fcn-cnt) ... (init [by-name-init by-name-cnt] ...)))
+           (if seal/c
+               #`(and/c #,seal/c #,class/c-stx)
+               class/c-stx))]
         [(Value: '()) #'null?]
         [(Struct: nm par (list (fld: flds acc-ids mut?) ...) proc poly? pred?)
          (cond
