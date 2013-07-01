@@ -247,7 +247,9 @@
            (list name type)))))
   (fp "~a"
       `(,(if object? 'Object 'Class)
-        ,@(if (and row-var (F? row-var))
+        ,@(if (and (not object?)
+                   row-var
+                   (F? row-var))
               `(#:row-var ,(F-n row-var))
               '())
         ,@(if (or object? (null? inits))
