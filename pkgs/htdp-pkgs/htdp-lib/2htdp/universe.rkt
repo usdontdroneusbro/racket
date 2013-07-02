@@ -171,8 +171,8 @@
  )
 
 (provide-primitives
- make-package  ;; World Sexp -> Package
- package?      ;; Any -> Boolean 
+ ; make-package  ;; World Sexp -> Package
+ ; package?      ;; Any -> Boolean 
  run-movie     ;; [r Positive] [m [Listof Image]] -> true
  ;; run movie m at rate r images per second 
  mouse-event?  ;; Any -> Boolean : MOUSE-EVTS

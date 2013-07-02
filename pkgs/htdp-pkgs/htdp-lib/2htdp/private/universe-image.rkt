@@ -67,3 +67,19 @@
       
 (define (image-pins i)
   (format "image with pinhole at (~s,~s)" (1:pinhole-x i) (1:pinhole-y i)))
+
+;; added to avoid OO access in world.rkt
+(provide draw-image
+         insert-into-pasteboard
+         delete-first-snip)
+
+(define (insert-into-pasteboard pb img)
+  (send pb insert (disable-cache (send img copy)) 0 0))
+
+(define (delete-first-snip pb)
+  (define s (send pb find-first-snip))
+  (when s (send pb delete s)))
+
+(define (draw-image img dc width height)
+  (send img draw dc 0 0 0 0 width height 0 0 #f))
+

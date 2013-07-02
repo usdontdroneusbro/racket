@@ -50,7 +50,8 @@
 (define universe%
   (last-mixin
    (clock-mixin
-    (class* object% (start-stop<%>) 
+    (class* object% (#;
+                     start-stop<%>) 
       (inspect #f) 
       (super-new)
       (init-field        ;; type Result

@@ -1,13 +1,24 @@
-#lang scheme/gui
+#lang typed/racket
 
-(require "timer.rkt")
+(require "timer.rkt" "world-type.rkt")
+
+(require/typed racket/gui
+  [yield ((Evtof (U exn Integer)) -> (U exn Integer))])
 
 (provide last-mixin)
 
-(define last-mixin
-  (mixin (start-stop<%>) ()
+(: last-mixin
+   (All (r #:row)
+     ((Class #:row-var r #:implements Start-Stop<%>)
+      ->
+      (Class #:row-var r #:implements Start-Stop<%>
+             (field [end:ch Any]
+                    [dr:cust Custodian])
+             [last (-> World)]))))
+(define (last-mixin cls)
+  (class cls
     ;; to comunicate between stop! and last
-    (field [end:ch  (make-channel)])
+    (field [end:ch  : (Channelof (U exn World)) ((inst make-channel (U exn World)))])
 
     ;; X -> Void
     (define/override (stop! w)
@@ -16,18 +27,20 @@
     
     ;; -> World
     (define/public (last) 
-      (define result (yield end:ch))
+      (define result (cast (yield (assert end:ch evt?)) (U exn World)))
       (if (exn? result) (raise result) result))
     
     (field [dr:cust (current-custodian)])
 
     ;; X -> Void
     ;; send x to last method
+    (: send-to-last ((U exn World) -> Void))
     (define/private (send-to-last x)
       (parameterize ((current-custodian dr:cust))
         (thread 
          (lambda ()
-           (channel-put end:ch x)))))
+           (channel-put end:ch x))))
+      (void))
     
     (super-new)))
     

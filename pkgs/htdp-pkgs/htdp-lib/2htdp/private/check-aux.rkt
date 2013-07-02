@@ -1,10 +1,16 @@
-#lang racket/base
+#lang typed/racket
 
 (require racket/class
          racket/list
          racket/bool
          racket/match
-         htdp/error)
+         typed/racket/gui)
+
+(require/typed
+ htdp/error
+ [check-arg
+  ((U String Symbol) Boolean String
+   (U String Symbol Natural) Any -> Void)])
 
 (provide (all-defined-out))
 
@@ -13,6 +19,13 @@
 (define TRIES  3)     ;; how many times should register try to connect to the server 
 (define PAUSE  1/2)     ;; # secs to wait between attempts to connect to server 
 (define SQPORT 4567) ;; the port on which universe traffic flows
+
+(define-type Mouse-Event (U "button-down" "button-up"
+                            "drag" "move"
+                            "enter" "leave"))
+
+;; FIXME? : not a very precise type
+(define-type Key-Event String)
 
 ;                                                                               
 ;                                                                               
@@ -33,17 +46,21 @@
 ;; ---------------------------------------------------------------------------------------------------
 
 ;; Any -> Boolean
-(define (nat? x)
-  (and (number? x) (integer? x) (>= x 0)))
+(define nat? exact-nonnegative-integer?)
 
 ;; Number Symbol Symbol -> Integer
+(: number->integer
+   (case-> (Real -> Integer)
+           (Real (U Symbol String) -> Integer)
+           (Real (U Symbol String) (U Symbol String) -> Integer)))
 (define (number->integer x [t ""] [p ""])
   (check-arg t (and (number? x) (real? x)) "real number" p x)
-  (inexact->exact (floor x)))
+  (exact-floor x))
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; Nat Nat ->String 
 ;; converts i to a string, adding leading zeros, make it at least as long as L
+(: zero-fill (Natural Natural -> String))
 (define (zero-fill i L)
   (let ([n (number->string i)])
     (string-append (make-string (max (- L (string-length n)) 0) #\0) n)))
@@ -51,7 +68,9 @@
 ;; ---------------------------------------------------------------------------------------------------
 
 ;; MouseEvent% -> [List Nat Nat MouseEventType]
-;; turn a mouse event into its pieces 
+;; turn a mouse event into its pieces
+(: mouse-event->parts ((Instance Mouse-Event%)
+                       -> (Values Integer Integer Mouse-Event)))
 (define (mouse-event->parts e)
   (define x (- (send e get-x) INSET))
   (define y (- (send e get-y) INSET))
@@ -67,6 +86,7 @@
                    (error 'on-mouse (format "Unknown event: ~a" m)))])))
 
 ;; KeyEvent% -> String
+(: key-event->parts ((Instance Key-Event%) -> Key-Event))
 (define (key-event->parts e)
   (define x (send e get-key-code))
   (cond
@@ -75,6 +95,7 @@
     [else (error 'on-key (format "Unknown event: ~a" x))]))
 
 ;; KeyEvent% -> String
+(: key-release->parts ((Instance Key-Event%) -> String))
 (define (key-release->parts e)
   (define x (send e get-key-release-code))
   (cond
@@ -83,13 +104,15 @@
     [else (error 'on-key (format "Unknown event: ~a" x))]))
 
 ;; ---------------------------------------------------------------------------------------------------
-;; Any -> Symbol 
+;; Any -> Symbol
+(: name-of (Any Symbol -> Symbol))
 (define (name-of draw tag)
-  (define fname  (object-name draw))
+  (define fname (assert (object-name draw) symbol?))
   (if fname fname tag))
 
 ;; ---------------------------------------------------------------------------------------------------
 ;; Any -> Boolean
+(: sexp? (Any -> Boolean))
 (define (sexp? x)
   (cond
     [(empty? x) true]
@@ -107,6 +130,7 @@
 ;(unless (sexp? (list (s (list 'a))))
 ;  (error 'prefab "structs should be sexp?"))
 
+(: no-newline? (String -> Boolean))
 (define (no-newline? x)
   (not (member #\newline (string->list x))))
 
@@ -115,16 +139,19 @@
 
 (define tcp-eof (gensym 'tcp-eof))
 
-;; Any -> Boolean 
+;; Any -> Boolean
+(: tcp-eof? (Any -> Boolean))
 (define (tcp-eof? a) (eq? tcp-eof a))
 
 ;; OutPort Sexp -> Void
+(: tcp-send (Output-Port Any -> Void))
 (define (tcp-send out msg)
   (write msg out)
   (newline out)
   (flush-output out))
 
 ;; InPort -> Sexp
+(: tcp-receive (Input-Port -> Any))
 (define (tcp-receive in)
   (with-handlers ((exn? (lambda (x) (raise tcp-eof))))
     (define x (read in))
@@ -136,6 +163,8 @@
 
 ;; InPort OutPort (X -> Y) -> (U Y Void)
 ;; process a registration from a potential client, invoke k on name if it is okay
+(: tcp-process-registration
+   (All (Y) (Input-Port Output-Port (Any -> Y) -> (U Y Void))))
 (define (tcp-process-registration in out k)
   (define next (tcp-receive in))
   (match next
@@ -144,7 +173,8 @@
      (k name)]))
   
 ;; InPort OutPort (U #f String) -> Void 
-;; register with the server, send the given name or make up a symbol 
+;; register with the server, send the given name or make up a symbol
+(: tcp-register (Input-Port Output-Port (Option String) -> Void))
 (define (tcp-register in out name)
   (define msg `(REGISTER ((name ,(if name name (gensym 'world))))))
   (tcp-send out msg)
@@ -169,6 +199,7 @@
 ;                  ;;;                              
 
 ;; Symbol Any String -> Void
+(: check-pos (Symbol Any String -> Void))
 (define (check-pos t c r)
   (check-arg 
    t (and (real? c) (>= (number->integer c t r) 0)) "positive integer" r c))
