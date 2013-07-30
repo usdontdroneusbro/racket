@@ -82,7 +82,12 @@
      `(->acc (list ,@(map sub dom)) ,(sub t) ,(sub pth))]
     [(Union: elems) (split-union elems)]
     [(Base: n cnt pred _) (int-err "Base type not in predefined-type-table" n)]
-    [(Name: stx) `(make-Name (quote-syntax ,stx))]
+    [(Name: stx orig-id deps args struct?)
+     `(make-Name (quote-syntax ,stx) (quote-syntax ,orig-id)
+                 (list ,@(map (λ (x) `(quote-syntax ,x)) deps))
+                 ,(and args
+                       `(list ,@(map (λ (x) `(quote-syntax ,x)) args)))
+                 ,struct?)]
     [(fld: t acc mut) `(make-fld ,(sub t) (quote-syntax ,acc) ,mut)]
     [(Struct: name parent flds proc poly? pred-id)
      `(make-Struct (quote-syntax ,name) ,(sub parent)

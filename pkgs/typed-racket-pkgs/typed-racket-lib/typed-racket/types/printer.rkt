@@ -8,7 +8,8 @@
          (path-up "rep/type-rep.rkt" "rep/filter-rep.rkt" "rep/object-rep.rkt"
                   "rep/rep-utils.rkt" "types/subtype.rkt"
                   "utils/utils.rkt"
-                  "utils/tc-utils.rkt")
+                  "utils/tc-utils.rkt"
+                  "env/type-name-env.rkt")
          (for-syntax racket/base syntax/parse))
 
 ;; printer-type: (one-of/c 'custom 'debug)
@@ -281,8 +282,8 @@
     [(? Rep-stx a)
      (fp "~a" (syntax->datum (Rep-stx a)))]
     [(Univ:) (fp "Any")]
-    ;; names are just the printed as the original syntax
-    [(Name: stx) (fp "~a" (syntax-e stx))]
+    ;; names are just printed as the original syntax
+    [(Name: _ orig-id _ _ _) (fp "~a" (syntax-e orig-id))]
     ;; If a type has a name, then print it with that name.
     ;; However, we expand the alias in some cases
     ;; (i.e., the fuel is > 0) for the :type form.
