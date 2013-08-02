@@ -603,7 +603,7 @@
                      (andmap equal? names names*)
                      (andmap sub types types*)
                      (andmap equal? opt? opt?*))])))
-          ;; There is no non-trivial subtyping on class types, but it's
+          ;; There is no non-trivial width subtyping on class types, but it's
           ;; possible for two "equal" class types to look different
           ;; in the representation. We deal with that here.
           (and (or (and (or (Row? row) (not row))
