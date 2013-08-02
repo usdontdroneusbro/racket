@@ -7,10 +7,10 @@
 (define-type YellowMessage%
   (Class #:implements Canvas%
          (init [parent (Instance Frame%)]
-               [style (U 'border 'control-border 'combo
-                         'vscroll 'hscroll 'resize-corner
-                         'gl 'no-autoclear 'transparent
-                         'no-focus 'deleted)
+               [style (Listof (U 'border 'control-border 'combo
+                                 'vscroll 'hscroll 'resize-corner
+                                 'gl 'no-autoclear 'transparent
+                                 'no-focus 'deleted))
                       #:optional]
                [paint-callback (Any (Instance DC<%>) -> Any)
                                #:optional]
