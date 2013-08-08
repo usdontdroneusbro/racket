@@ -1,5 +1,8 @@
 #lang typed/racket
 
+(provide Mode Image-Color Y-Place X-Place Angle Side-Count
+         Pen-Style Pen-Cap Pen-Join)
+
 (define-type Mode
   (U 'solid "solid" 'outline "outline" Byte))
 
@@ -97,8 +100,9 @@
  [place-image (Image Real Real Image -> Image)]
  [place-image/align (Image Real Real X-Place Y-Place Image -> Image)]
  [scene+line (Image Real Real Real Real (U pen Image-Color) -> Image)]
+
  [scene+curve (Image Real Real Angle Real Real Real Angle Real
-               (U pen Image-Color) -> Image)]
+                     (U pen Image-Color) -> Image)]
  ;; 2.3.5
  [rotate (Angle Image -> Image)]
  [scale (Positive-Real Image -> Image)]
