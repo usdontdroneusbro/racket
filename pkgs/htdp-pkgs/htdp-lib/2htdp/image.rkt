@@ -139,7 +139,9 @@ and they all have good sample contracts. (It is amazing what we can do with kids
          bitmap/file)
 
 (provide bitmap
-         empty-image)
+         empty-image
+         struct:color
+         struct:pen)
 
 (define-primitive make-color build-color/make-color)
 (define-primitive color build-color/color

@@ -1340,7 +1340,7 @@ the mask bitmap and the original bitmap are all together in a single bytes!
          curve-segment-start curve-segment-s-angle curve-segment-s-pull
          curve-segment-end curve-segment-e-angle curve-segment-e-pull 
          curve-segment-color
-         make-pen pen? pen-color pen-width pen-style pen-cap pen-join pen
+         make-pen pen? pen-color pen-width pen-style pen-cap pen-join pen struct:pen
          
          make-ibitmap ibitmap? ibitmap-raw-bitmap ibitmap-angle ibitmap-x-scale ibitmap-y-scale 
          ibitmap-cache

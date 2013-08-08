@@ -69,7 +69,10 @@ plt/collects/tests/mzscheme/htdp-image.rkt
          alpha-color-red
          alpha-color-green
          alpha-color-blue
-         alpha-color?)
+         alpha-color?
+
+         struct:color
+         struct:alpha-color)
 
 ;; ----------------------------------------
 
