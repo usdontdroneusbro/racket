@@ -398,6 +398,9 @@
         [(Prompt-Tagof: s (Function: (list (arr: (list ts ...) _ _ _ _))))
          (set-chaperone!)
          #`(prompt-tag/c #,@(map t->c/both ts) #:call/cc #,(t->c/both s))]
+        [(Evt: t)
+         (set-chaperone!)
+         #`(evt/c #,(t->c/both t))]
         ;; TODO
         [(F: v) (cond [(assoc v (vars)) => second]
                       [else (int-err "unknown var: ~a" v)])]
