@@ -885,6 +885,17 @@
 
 ;; Section 5.6 (Structure Utilities)
 [struct->vector (Univ . -> . (-vec Univ))]
+[struct? (Univ . -> . B)]
+[struct-type? (Univ . -> . B)]
+[struct-constructor-procedure?
+ (asym-pred Univ B (-FS (-filter top-func) 0) -top)]
+[struct-predicate-procedure?
+ (asym-pred Univ B (-FS (-filter top-func) 0) -top)]
+[struct-accessor-procedure?
+ (asym-pred Univ B (-FS (-filter top-func) 0) -top)]
+[struct-mutator-procedure?
+ (asym-pred Univ B (-FS (-filter top-func) 0) -top)]
+[prefab-struct-key (-> Univ Univ)]
 
 ;; Section 6.2 (Classes)
 [object% (make-Class #f null null null null)]
