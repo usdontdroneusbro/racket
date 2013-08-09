@@ -926,8 +926,50 @@
           (+ 1 x))))
     (send (new c%) m 0))
 
+   ;; make sure augment type is reflected in class type
+   (check-ok
+     (: c% (Class (augment [m (String -> Integer)])
+                  [m (Integer -> Integer)]))
+     (define c%
+       (class object% (super-new)
+         (: m (Integer -> Integer)
+            #:augment (String -> Integer))
+         (define/pubment (m x) x))))
+
+   ;; pubment with different augment type
+   (check-ok
+    (define c%
+      (class object%
+        (super-new)
+        (: m (Integer -> Integer)
+           #:augment (String -> String))
+        (define/pubment (m x)
+          (inner "" m "foo") 0)))
+    (define d%
+      (class c%
+        (super-new)
+        (define/augment (m x)
+          (string-append x "bar"))))
+    (send (new c%) m 0))
+
+   ;; fail, bad inner argument
+   (check-err #:exn #rx"Expected String, but got Integer"
+    (define c%
+      (class object%
+        (super-new)
+        (: m (Integer -> Integer)
+           #:augment (String -> String))
+        (define/pubment (m x)
+          (inner "" m x) 0)))
+    (define d%
+      (class c%
+        (super-new)
+        (define/augment (m x)
+          (string-append x "bar"))))
+    (send (new c%) m 0))
+
    ;; Fail, bad inner default
-   (check-err
+   (check-err #:exn #rx"Expected Integer, but got String"
     (define c%
       (class object%
         (super-new)
@@ -936,7 +978,7 @@
           (inner "foo" m x)))))
 
    ;; Fail, wrong number of arguments to inner
-   (check-err
+   (check-err #:exn #rx"Wrong number of arguments, expected 2"
     (define c%
       (class object%
         (super-new)
@@ -945,7 +987,7 @@
           (inner 3 m)))))
 
    ;; Fail, bad augment type
-   (check-err
+   (check-err #:exn #rx"Expected Integer, but got String"
     (define c%
       (class object%
         (super-new)
@@ -958,7 +1000,7 @@
         (define/augment (m x) "bad type"))))
 
    ;; Fail, cannot augment non-augmentable method
-   (check-err
+   (check-err #:exn #rx"superclass missing augmentable method m"
     (define c%
       (class object%
         (super-new)
@@ -981,7 +1023,8 @@
 
    ;; Pubment with expected class type
    (check-ok
-    (: c% (Class (augment [m (Natural -> Natural)])))
+    (: c% (Class [m (Natural -> Natural)]
+                 (augment [m (Natural -> Natural)])))
     (define c%
       (class object%
         (super-new)

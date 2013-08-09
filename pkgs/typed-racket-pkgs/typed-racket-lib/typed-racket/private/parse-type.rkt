@@ -16,8 +16,8 @@
          racket/syntax
          (only-in unstable/list check-duplicate)
          "parse-classes.rkt"
-         (only-in racket/class init init-field field)
-         (for-template (only-in racket/class init init-field field))
+         (only-in racket/class init init-field field augment)
+         (for-template (only-in racket/class init init-field field augment))
          (for-template racket/base "../base-env/colon.rkt")
          ;; needed at this phase for tests
          "../base-env/colon.rkt"
