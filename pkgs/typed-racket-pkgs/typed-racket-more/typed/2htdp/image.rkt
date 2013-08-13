@@ -21,10 +21,6 @@
 
 (define-type Side-Count Positive-Integer)
 
-#;
-(define-type Real-Valued-Posn
-  ...)
-
 (define-type Pen-Style
   (U "solid" 'solid "dot" 'dot "long-dash" 'long-dash
      "short-dash" 'short-dash "dot-dash" 'dot-dash))
@@ -34,6 +30,12 @@
 
 (define-type Pen-Join
   (U "round" 'round "bevel" 'bevel "miter" 'miter))
+
+(require/typed/provide
+ lang/posn
+ #;
+ [#:struct posn ([x : Real] [y : Real])
+           #:extra-constructor-name make-posn])
 
 (require/typed/provide
  2htdp/image
@@ -78,7 +80,7 @@
   (Positive-Integer Nonnegative-Real Nonnegative-Real Mode (U pen Image-Color) -> Image)]
  [regular-polygon (Nonnegative-Real Side-Count Mode (U pen Image-Color) -> Image)]
  #;
- [polygon ((Listof Real-Valued-Posn) Mode (U pen Image-Color) -> Image)]
+ [polygon ((Listof posn) Mode (U pen Image-Color) -> Image)]
  ;; 2.3.3
  [overlay (Image Image Image * -> Image)]
  [overlay/align (X-Place Y-Place Image Image Image * -> Image)]
