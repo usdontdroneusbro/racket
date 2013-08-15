@@ -46,6 +46,8 @@
 (define (initialize-type-env initial-env)
   (for-each (lambda (nm/ty) (register-type-if-undefined (car nm/ty) (cadr nm/ty))) initial-env))
 
+(define current-class-cache (make-parameter #f))
+
 (define (converter v basic sub)
   (define (numeric? t) (match t [(Base: _ _ _ b) b] [(Value: (? number?)) #t] [_ #f]))
   (define (split-union ts)
@@ -96,17 +98,27 @@
     [(PolyRow-names: ns c b) `(make-PolyRow (list ,@(map sub ns))
                                             (quote ,c) ,(sub b))]
     [(Class: row inits fields methods augments)
-     ;; FIXME: there's probably a better way to do this
-     (define (convert members [inits? #f])
-       (for/list ([m members])
-         `(list (quote ,(car m))
-                ,(sub (cadr m))
-                ,@(if inits? (cddr m) '()))))
-     `(make-Class ,(sub row)
-                  (list ,@(convert inits #t))
-                  (list ,@(convert fields))
-                  (list ,@(convert methods))
-                  (list ,@(convert augments)))]
+     (cond [(and (current-class-cache)
+                 (dict-ref (unbox (current-class-cache)) v #f)) => car]
+           [else
+            ;; FIXME: there's probably a better way to do this
+            (define (convert members [inits? #f])
+              (for/list ([m members])
+                `(list (quote ,(car m))
+                       ,(sub (cadr m))
+                       ,@(if inits? (cddr m) '()))))
+            (define class-type
+              `(make-Class ,(sub row)
+                           (list ,@(convert inits #t))
+                           (list ,@(convert fields))
+                           (list ,@(convert methods))
+                           (list ,@(convert augments))))
+            (define name (gensym))
+            (define cache-box (current-class-cache))
+            (when cache-box
+              (set-box! cache-box
+                        (dict-set (unbox cache-box) v (list name class-type))))
+            (if cache-box name class-type)])]
     [(arr: dom rng rest drest kws)
      `(make-arr ,(sub dom) ,(sub rng) ,(sub rest) ,(sub drest) ,(sub kws))]
     [(TypeFilter: t p i)
@@ -156,14 +168,23 @@
 
 
 (define (talias-env-init-code)
+  (define class-type-cache (box '()))
   (define (f id ty)
     (if (bound-in-this-module id)
         #`(register-resolved-type-alias #'#,id #,(datum->syntax #'here (print-convert ty)))
         #f))
-  (parameterize ((current-print-convert-hook converter)
+  (parameterize ((current-class-cache class-type-cache)
+                 (current-print-convert-hook converter)
+                 ;; ignore sharing in all cases
+                 (current-build-share-hook (λ (v basic sub) 'atomic))
                  (show-sharing #f)
                  (booleans-as-true/false #f))
-    #`(begin #,@(filter values (type-alias-env-map f)))))
+    (define aliases (filter values (type-alias-env-map f)))
+    #`(begin
+        #,@(for/list ([name+type (dict-values (unbox class-type-cache))])
+             (match-define (list name type) name+type)
+             (datum->syntax #'here `(define ,name ,type)))
+        #,@aliases)))
 
 (define (env-init-code syntax-provide? provide-tbl def-tbl)
   (define (f id ty)
