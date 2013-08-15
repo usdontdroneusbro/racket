@@ -17,6 +17,7 @@
  racket/match syntax/stx racket/syntax racket/list
  racket/format
  unstable/list
+ (only-in racket/set set-intersect set-subtract)
  unstable/sequence
  (contract-req)
  (for-template racket/base racket/contract racket/set (utils any-wrap)
@@ -485,24 +486,39 @@
          ;; the vars parameter.
          (define seal/c
            (and (F? row-var) (second (assoc (F-n row-var) (vars)))))
-         (with-syntax ([(fcn-cnt ...) (for/list ([f (in-list fcn)]) (t->c/fun f #:method #t))]
+         (define method-contract-map
+           (for/hash ([n (in-list name)] [f (in-list fcn)])
+             (values n (t->c/fun f #:method #t))))
+         (define-values (public-names public-ctcs)
+           (for/lists (_1 _2) ([k+v (in-hash-pairs method-contract-map)])
+             (values (car k+v) (cdr k+v))))
+         (define pubment-names (set-intersect name aug-name))
+         (define override-names (set-subtract name pubment-names))
+         (with-syntax ([(fcn-cnt ...) public-ctcs]
                        [(aug-fcn-cnt ...)
                         (for/list ([f (in-list aug-fcn)])
                           (t->c/fun f #:method #t))]
-                       [(name ...) name]
+                       [(pubment-fcn-cnt ...)
+                        (for/list ([name (in-list pubment-names)])
+                          (hash-ref method-contract-map name))]
+                       [(override-fcn-cnt ...)
+                        (for/list ([name (in-list override-names)])
+                          (hash-ref method-contract-map name))]
+                       [(name ...) public-names]
                        [(aug-name ...) aug-name]
+                       [(pubment-name ...) pubment-names]
+                       [(override-name ...) override-names]
                        [(by-name-cnt ...) (for/list ([t (in-list by-name-init-ty)]) (t->c/neg t))]
                        [(by-name-init ...) by-name-init])
            (define class/c-stx
              #'(class/c
                 (init [by-name-init by-name-cnt] ...)
                 (name fcn-cnt) ...
-                (aug-name aug-fcn-cnt) ...
                 (inherit [name fcn-cnt]) ...
-                (super [name fcn-cnt]) ...
+                (super [override-name override-fcn-cnt]) ...
                 (inner [aug-name aug-fcn-cnt]) ...
-                (override [name fcn-cnt]) ...
-                (augment [aug-name aug-fcn-cnt]) ...))
+                (override [override-name override-fcn-cnt]) ...
+                (augment [pubment-name pubment-fcn-cnt]) ...))
            (if seal/c
                #`(and/c #,seal/c #,class/c-stx)
                class/c-stx))]
