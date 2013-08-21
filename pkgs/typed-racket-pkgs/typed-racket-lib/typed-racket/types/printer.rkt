@@ -256,8 +256,7 @@
               '()
               (list (transform-inits)))
         ,@(if (null? fields) '() (list (cons 'field fields)))
-        ,@(cond [(null? augments) '()]
-                [object? augments]
+        ,@(cond [(or object? (null? augments)) '()]
                 [else (list (cons 'augment augments))])
         ,@methods)))
 
