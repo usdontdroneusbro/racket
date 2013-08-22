@@ -47,6 +47,8 @@
       (get-contract-def flat-contract-def-property)
       (get-contract-def contract-def/maker-property))))
 
+;; define/fixup-contract? : Syntax -> Boolean
+;; Check if the argument is a definition that needs to be contracted
 (define (define/fixup-contract? stx)
   (or (typechecker:contract-def stx)
       (typechecker:flat-contract-def stx)
@@ -66,6 +68,8 @@
        (if reason (~a ": " reason) "."))
    to-check))
 
+;; generate-contract-def : Syntax -> Syntax
+;; Construct a contracted definition for `require/typed`
 (define (generate-contract-def stx)
   (define prop (define/fixup-contract? stx))
   (define maker? (typechecker:contract-def/maker stx))
@@ -92,6 +96,9 @@
     [_ (int-err "should never happen - not a define-values: ~a"
 		(syntax->datum stx))]))
 
+;; change-contract-fixups : Syntax -> Listof<Syntax>
+;; Some type->contract translations are deferred, so resolve
+;; those here and leave everything else as is.
 (define (change-contract-fixups forms)
   (for/list ((e (in-syntax forms)))
     (if (not (define/fixup-contract? e))
