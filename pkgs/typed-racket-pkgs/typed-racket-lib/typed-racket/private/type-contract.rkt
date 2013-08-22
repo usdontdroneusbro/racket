@@ -15,6 +15,7 @@
  (prefix-in t: (types abbrev numeric-tower))
  (private parse-type syntax-properties)
  racket/match syntax/struct syntax/stx racket/syntax racket/list
+ racket/dict
  unstable/sequence
  (contract-req)
  (for-template racket/base racket/contract racket/set (utils any-wrap)
@@ -47,6 +48,19 @@
       (typechecker:flat-contract-def stx)
       (typechecker:contract-def/maker stx)))
 
+;; The following two parameters should be parameterized together
+
+;; current-contract-cache : Parameter<Option<Dict<Id,Stx>>>
+;; This parameter controls whether contracts should be cached
+;; (non-#f) and if so stores a mutable dictionary from identifiers
+;; to contracts. Used to make serialization efficient.
+(define current-contract-cache (make-parameter #f))
+
+;; current-contract-ids :  Parameter<Option<Box<List<Type>>>>
+;; Records a list of types that need to be written out
+;; in a particular order for the cache above
+(define current-contract-types (make-parameter #f))
+
 ;; generate-contract-def : Syntax -> Syntax
 ;; Construct a contracted definition for `require/typed`
 (define (generate-contract-def stx)
@@ -60,22 +74,23 @@
      (let ([typ (if maker?
                     ((map fld-t (Struct-flds (lookup-type-name (Name-id typ)))) #f . t:->* . typ)
                     typ)])
-         (with-syntax ([cnt (type->contract
-                             typ
-                             ;; this is for a `require/typed', so the value is not from the typed side
-                             #:typed-side #f
-                             #:kind kind
-                             (λ () 
-                               (tc-error/stx 
-                                prop 
-				"Type ~a could not be converted to a contract."
-				typ)))])
-           (quasisyntax/loc 
-	    stx
-	    (define-values (n) 
-	      (recursive-contract 
-	       cnt
-	       #,(contract-kind->keyword kind))))))]
+       (define/with-syntax cnt
+         (type->contract
+          typ
+          ;; this is for a `require/typed', so the value is not from the typed side
+          #:typed-side #f
+          #:kind kind
+          (λ ()
+            (tc-error/stx
+             prop
+             "Type ~a could not be converted to a contract."
+             typ))))
+       (quasisyntax/loc
+        stx
+        (define-values (n)
+          (recursive-contract
+           cnt
+           #,(contract-kind->keyword kind)))))]
     [_ (int-err "should never happen - not a define-values: ~a"
 		(syntax->datum stx))]))
 
@@ -83,10 +98,30 @@
 ;; Some type->contract translations are deferred, so resolve
 ;; those here and leave everything else as is.
 (define (change-contract-fixups forms)
-  (for/list ((e (in-syntax forms)))
-    (if (not (define/fixup-contract? e))
-        e
-        (generate-contract-def e))))
+  (parameterize ([current-contract-cache (make-hasheq)]
+                 [current-contract-types (box '())])
+    (let loop ([results '()] [exprs (syntax->list forms)])
+      (cond [(empty? exprs) (reverse results)]
+            [(not (define/fixup-contract? (car exprs)))
+             (loop (cons (car exprs) results) (cdr exprs))]
+            [else
+             (define fixed-up-e (generate-contract-def (car exprs)))
+             ;; use these two parameters to collect contracts and
+             ;; name them to reduce the size of the resulting syntax
+             (define cache (current-contract-cache))
+             (define type-box (current-contract-types))
+             (define defs
+               (for/list ([type (in-list (unbox type-box))])
+                 (define name+ctc (dict-ref cache type))
+                 (match-define (list name ctc) name+ctc)
+                 #`(define #,name #,ctc)))
+             ;; reset before the next loop so that each expr only
+             ;; generates contracts for types it refers to
+             ;; (this prevents unbound id errors due to require
+             ;;  depdendencies, e.g., from Opaque types)
+             (set-box! type-box '())
+             (loop (append (cons fixed-up-e defs) results)
+                   (cdr exprs))]))))
 
 (define (no-duplicates l)
   (= (length l) (length (remove-duplicates l))))
@@ -273,202 +308,219 @@
         (increase-current-contract-kind! chaperone-sym))
 
 
-      (match ty
-        [(or (App: _ _ _) (Name: _)) (t->c (resolve-once ty))]
-        ;; any/c doesn't provide protection in positive position
-        [(Univ:)
-         (cond [(from-typed? typed-side)
-                (set-chaperone!)
-                #'any-wrap/c]
-               [else #'any/c])]
-        ;; we special-case lists:
-        [(Mu: var (Union: (list (Value: '()) (Pair: elem-ty (F: var)))))
-         (if (and (not (from-typed? typed-side)) (type-equal? elem-ty t:Univ))
-             #'list?
-             #`(listof #,(t->c elem-ty)))]
-        [(? (lambda (e) (eq? t:Any-Syntax e))) #'syntax?]
+      (define cache (current-contract-cache))
+      (cond
+       [(and cache (dict-ref cache ty #f)) => car]
+       [else
+        (define ctc
+          (match ty
+            [(or (App: _ _ _) (Name: _)) (t->c (resolve-once ty))]
+            ;; any/c doesn't provide protection in positive position
+            [(Univ:)
+             (cond [(from-typed? typed-side)
+                    (set-chaperone!)
+                    #'any-wrap/c]
+                   [else #'any/c])]
+            ;; we special-case lists:
+            [(Mu: var (Union: (list (Value: '()) (Pair: elem-ty (F: var)))))
+             (if (and (not (from-typed? typed-side)) (type-equal? elem-ty t:Univ))
+                 #'list?
+                 #`(listof #,(t->c elem-ty)))]
+            [(? (lambda (e) (eq? t:Any-Syntax e))) #'syntax?]
 
-        ;; numeric special cases
-        ;; since often-used types like Integer are big unions, this would
-        ;; generate large contracts.
-        [(== t:-PosByte type-equal?) #'(flat-named-contract 'Positive-Byte (and/c byte? positive?))]
-        [(== t:-Byte type-equal?) #'(flat-named-contract 'Byte byte?)]
-        [(== t:-PosIndex type-equal?) #'(flat-named-contract 'Positive-Index (and/c t:index? positive?))]
-        [(== t:-Index type-equal?) #'(flat-named-contract 'Index t:index?)]
-        [(== t:-PosFixnum type-equal?) #'(flat-named-contract 'Positive-Fixnum (and/c fixnum? positive?))]
-        [(== t:-NonNegFixnum type-equal?) #'(flat-named-contract 'Nonnegative-Fixnum (and/c fixnum? (lambda (x) (>= x 0))))]
-        ;; -NegFixnum is a base type
-        [(== t:-NonPosFixnum type-equal?) #'(flat-named-contract 'Nonpositive-Fixnum (and/c fixnum? (lambda (x) (<= x 0))))]
-        [(== t:-Fixnum type-equal?) #'(flat-named-contract 'Fixnum fixnum?)]
-        [(== t:-PosInt type-equal?) #'(flat-named-contract 'Positive-Integer (and/c exact-integer? positive?))]
-        [(== t:-Nat type-equal?) #'(flat-named-contract 'Natural (and/c exact-integer? (lambda (x) (>= x 0))))]
-        [(== t:-NegInt type-equal?) #'(flat-named-contract 'Negative-Integer (and/c exact-integer? negative?))]
-        [(== t:-NonPosInt type-equal?) #'(flat-named-contract 'Nonpositive-Integer (and/c exact-integer? (lambda (x) (<= x 0))))]
-        [(== t:-Int type-equal?) #'(flat-named-contract 'Integer exact-integer?)]
-        [(== t:-PosRat type-equal?) #'(flat-named-contract 'Positive-Rational (and/c t:exact-rational? positive?))]
-        [(== t:-NonNegRat type-equal?) #'(flat-named-contract 'Nonnegative-Rational (and/c t:exact-rational? (lambda (x) (>= x 0))))]
-        [(== t:-NegRat type-equal?) #'(flat-named-contract 'Negative-Rational (and/c t:exact-rational? negative?))]
-        [(== t:-NonPosRat type-equal?) #'(flat-named-contract 'Nonpositive-Rational (and/c t:exact-rational? (lambda (x) (<= x 0))))]
-        [(== t:-Rat type-equal?) #'(flat-named-contract 'Rational t:exact-rational?)]
-        [(== t:-FlonumZero type-equal?) #'(flat-named-contract 'Float-Zero (and/c flonum? zero?))]
-        [(== t:-NonNegFlonum type-equal?) #'(flat-named-contract 'Nonnegative-Float (and/c flonum? (lambda (x) (not (< x 0)))))]
-        [(== t:-NonPosFlonum type-equal?) #'(flat-named-contract 'Nonpositive-Float (and/c flonum? (lambda (x) (not (> x 0)))))]
-        [(== t:-NegFlonum type-equal?) #'(flat-named-contract 'Negative-Float (and/c flonum? (lambda (x) (not (>= x 0)))))]
-        [(== t:-PosFlonum type-equal?) #'(flat-named-contract 'Positive-Float (and/c flonum? (lambda (x) (not (<= x 0)))))]
-        [(== t:-Flonum type-equal?) #'(flat-named-contract 'Float flonum?)]
-        [(== t:-SingleFlonumZero type-equal?) #'(flat-named-contract 'Single-Flonum-Zero (and/c single-flonum? zero?))]
-        [(== t:-InexactRealZero type-equal?) #'(flat-named-contract 'Inexact-Real-Zero (and/c inexact-real? zero?))]
-        [(== t:-PosSingleFlonum type-equal?) #'(flat-named-contract 'Positive-Single-Flonum (and/c single-flonum? (lambda (x) (not (<= x 0)))))]
-        [(== t:-PosInexactReal type-equal?) #'(flat-named-contract 'Positive-Inexact-Real (and/c inexact-real? (lambda (x) (not (<= x 0)))))]
-        [(== t:-NonNegSingleFlonum type-equal?) #'(flat-named-contract 'Nonnegative-Single-Flonum (and/c single-flonum? (lambda (x) (not (< x 0)))))]
-        [(== t:-NonNegInexactReal type-equal?) #'(flat-named-contract 'Nonnegative-Inexact-Real (and/c inexact-real? (lambda (x) (not (< x 0)))))]
-        [(== t:-NegSingleFlonum type-equal?) #'(flat-named-contract 'Negative-Single-Flonum (and/c single-flonum? (lambda (x) (not (>= x 0)))))]
-        [(== t:-NegInexactReal type-equal?) #'(flat-named-contract 'Negative-Inexact-Real (and/c inexact-real? (lambda (x) (not (>= x 0)))))]
-        [(== t:-NonPosSingleFlonum type-equal?) #'(flat-named-contract 'Nonpositive-Single-Flonum (and/c single-flonum? (lambda (x) (not (> x 0)))))]
-        [(== t:-NonPosInexactReal type-equal?) #'(flat-named-contract 'Nonpositive-Inexact-Real (and/c inexact-real? (lambda (x) (not (> x 0)))))]
-        [(== t:-SingleFlonum type-equal?) #'(flat-named-contract 'Single-Flonum single-flonum?)]
-        [(== t:-InexactReal type-equal?) #'(flat-named-contract 'Inexact-Real inexact-real?)]
-        [(== t:-RealZero type-equal?) #'(flat-named-contract 'Real-Zero (and/c real? zero?))]
-        [(== t:-PosReal type-equal?) #'(flat-named-contract 'Positive-Real (and/c real? (lambda (x) (not (<= x 0)))))]
-        [(== t:-NonNegReal type-equal?) #'(flat-named-contract 'Nonnegative-Real (and/c real? (lambda (x) (not (< x 0)))))]
-        [(== t:-NegReal type-equal?) #'(flat-named-contract 'Negative-Real (and/c real? (lambda (x) (not (>= x 0)))))]
-        [(== t:-NonPosReal type-equal?) #'(flat-named-contract 'Nonpositive-Real (and/c real? (lambda (x) (not (> x 0)))))]
-        [(== t:-Real type-equal?) #'(flat-named-contract 'Real real?)]
-        [(== t:-ExactNumber type-equal?) #'(flat-named-contract 'Exact-Number (and/c number? exact?))]
-        [(== t:-InexactComplex type-equal?)
-         #'(flat-named-contract 'Inexact-Complex
-                                (and/c number?
-                                       (lambda (x)
-                                         (and (inexact-real? (imag-part x))
-                                              (inexact-real? (real-part x))))))]
-        [(== t:-Number type-equal?) #'(flat-named-contract 'Number number?)]
-
-        [(Base: sym cnt _ _ _) #`(flat-named-contract '#,sym (flat-contract-predicate #,cnt))]
-        [(Refinement: par p? cert)
-         #`(and/c #,(t->c par) (flat-contract #,(cert p?)))]
-        [(Union: elems)
-         (let-values ([(vars notvars) (partition F? elems)])
-           (unless (>= 1 (length vars)) (exit (fail)))
-           (with-syntax
-               ([cnts (append (map t->c vars) (map t->c notvars))])
-             #'(or/c . cnts)))]
-        [(and t (Function: _)) (t->c/fun t)]
-        [(Set: t)
-         #`(set/c #,(t->c t #:kind (contract-kind-min kind chaperone-sym)))]
-        [(Sequence: ts) #`(sequence/c #,@(map t->c ts))]
-        [(Vector: t)
-         (set-chaperone!)
-         #`(vectorof #,(t->c/both t))]
-        [(HeterogeneousVector: ts)
-         (set-chaperone!)
-         #`(vector/c #,@(map t->c/both ts))]
-        [(Box: t)
-         (set-chaperone!)
-         #`(box/c #,(t->c/both t))]
-        [(Pair: t1 t2)
-         #`(cons/c #,(t->c t1) #,(t->c t2))]
-        [(Promise: t)
-         (set-chaperone!)
-         #`(promise/c #,(t->c t))]
-        [(Opaque: p? cert)
-         #`(flat-named-contract (quote #,(syntax-e p?)) #,(cert p?))]
-        [(Continuation-Mark-Keyof: t)
-         (set-chaperone!)
-         #`(continuation-mark-key/c #,(t->c/both t))]
-        ;; TODO: this is not quite right for case->
-        [(Prompt-Tagof: s (Function: (list (arr: (list ts ...) _ _ _ _))))
-         (set-chaperone!)
-         #`(prompt-tag/c #,@(map t->c/both ts) #:call/cc #,(t->c/both s))]
-        ;; TODO
-        [(F: v) (cond [(assoc v (vars)) => second]
-                      [else (int-err "unknown var: ~a" v)])]
-        [(Poly: vs b)
-         ;; Don't generate poly contracts for non-functions
-         (define function-type?
-           (let loop ([ty ty])
-             (match (resolve ty)
-               [(Function: _) #t]
-               [(Union: elems) (andmap loop elems)]
-               [(Poly: _ body) (loop body)]
-               [(PolyDots: _ body) (loop body)]
-               [_ #f])))
-         (unless function-type?
-           (exit (fail)))
-         (if (not (from-untyped? typed-side))
-             ;; in typed positions, no checking needed for the variables
-             (parameterize ([vars (append (for/list ([v (in-list vs)]) (list v #'any/c)) (vars))])
-               (t->c b))
-             ;; in untyped positions, use `parameteric/c'
-             (match-let ([(Poly-names: vs-nm _) ty])
-               (with-syntax ([(v ...) (generate-temporaries vs-nm)])
-                 (set-impersonator!)
-                 (parameterize ([vars (append (stx-map list vs #'(v ...))
-                                              (vars))])
-                   #`(parametric->/c (v ...) #,(t->c b))))))]
-        [(Mu: n b)
-         (match-let ([(Mu-name: n-nm _) ty])
-           (with-syntax ([(n*) (generate-temporaries (list n-nm))])
-             (parameterize ([vars (cons (list n #'n*) (vars))]
-                            [current-contract-kind
-                             (contract-kind-min kind chaperone-sym)])
-               (define ctc (t->c/both b))
-               #`(letrec ([n* (recursive-contract
-                                #,ctc
-                                #,(contract-kind->keyword
-                                   (current-contract-kind)))])
-                   n*))))]
-        [(Instance: (? Mu? t))
-         (t->c (make-Instance (resolve-once t)))]
-        [(Instance: (Class: _ _ (list (list name fcn) ...)))
-         (set-impersonator!)
-         (with-syntax ([(fcn-cnts ...) (for/list ([f (in-list fcn)]) (t->c/fun f #:method #t))]
-                       [(names ...) name])
-           #'(object/c (names fcn-cnts) ...))]
-        ;; init args not currently handled by class/c
-        [(Class: _ (list (list by-name-init by-name-init-ty _) ...) (list (list name fcn) ...))
-         (set-impersonator!)
-         (with-syntax ([(fcn-cnt ...) (for/list ([f (in-list fcn)]) (t->c/fun f #:method #t))]
-                       [(name ...) name]
-                       [(by-name-cnt ...) (for/list ([t (in-list by-name-init-ty)]) (t->c/neg t))]
-                       [(by-name-init ...) by-name-init])
-           #'(class/c (name fcn-cnt) ... (init [by-name-init by-name-cnt] ...)))]
-        [(Value: '()) #'null?]
-        [(Struct: nm par (list (fld: flds acc-ids mut?) ...) proc poly? pred?)
-         (cond
-           [(assf (λ (t) (type-equal? t ty)) structs-seen)
-            =>
-            cdr]
-           [proc (exit (fail))]
-           [(and (equal? kind flat-sym) (ormap values mut?))
-            (exit (fail))]
-           [poly?
-            (with-syntax* ([struct-ctc (generate-temporary 'struct-ctc)])
-              (define field-contracts
-                (for/list ([fty (in-list flds)] [mut? (in-list mut?)])
-                  (with-syntax* ([rec (generate-temporary 'rec)])
-                    (define required-recursive-kind
-                       (contract-kind-min kind (if mut? impersonator-sym chaperone-sym)))
-                    (define t->c/mut (if mut? t->c/both t->c))
-                    ;(printf "kind: ~a mut-k: ~a req-rec-kind: ~a\n" kind (if mut? impersonator-sym chaperone-sym) required-recursive-kind)
-                    (parameterize ((current-contract-kind (contract-kind-min kind chaperone-sym)))
-                      (let ((fld-ctc (t->c/mut fty #:seen (cons (cons ty #'rec) structs-seen)
-                                               #:kind required-recursive-kind)))
-                        #`(let ((rec (recursive-contract struct-ctc #,(contract-kind->keyword (current-contract-kind)))))
-                            #,fld-ctc))))))
-              #`(letrec ((struct-ctc (struct/c #,nm #,@field-contracts))) struct-ctc))]
-           [else #`(flat-named-contract '#,(syntax-e pred?) #,pred?)])]
-        [(Syntax: (Base: 'Symbol _ _ _ _)) #'identifier?]
-        [(Syntax: t)
-         #`(syntax/c #,(t->c t #:kind flat-sym))]
-        [(Value: v) #`(flat-named-contract '#,v (lambda (x) (equal? x '#,v)))]
-        ;; TODO Is this sound?
-	[(Param: in out) 
-	 (set-impersonator!)
-	 #`(parameter/c #,(t->c in) #,(t->c out))]
-        [(Hashtable: k v)
-         (when (equal? kind flat-sym) (exit (fail)))
-         #`(hash/c #,(t->c k #:kind chaperone-sym) #,(t->c v) #:immutable 'dont-care)]
-        [else
-         (exit (fail))]))))
+            ;; numeric special cases
+            ;; since often-used types like Integer are big unions, this would
+            ;; generate large contracts.
+            [(== t:-PosByte type-equal?) #'(flat-named-contract 'Positive-Byte (and/c byte? positive?))]
+            [(== t:-Byte type-equal?) #'(flat-named-contract 'Byte byte?)]
+            [(== t:-PosIndex type-equal?) #'(flat-named-contract 'Positive-Index (and/c t:index? positive?))]
+            [(== t:-Index type-equal?) #'(flat-named-contract 'Index t:index?)]
+            [(== t:-PosFixnum type-equal?) #'(flat-named-contract 'Positive-Fixnum (and/c fixnum? positive?))]
+            [(== t:-NonNegFixnum type-equal?) #'(flat-named-contract 'Nonnegative-Fixnum (and/c fixnum? (lambda (x) (>= x 0))))]
+            ;; -NegFixnum is a base type
+            [(== t:-NonPosFixnum type-equal?) #'(flat-named-contract 'Nonpositive-Fixnum (and/c fixnum? (lambda (x) (<= x 0))))]
+            [(== t:-Fixnum type-equal?) #'(flat-named-contract 'Fixnum fixnum?)]
+            [(== t:-PosInt type-equal?) #'(flat-named-contract 'Positive-Integer (and/c exact-integer? positive?))]
+            [(== t:-Nat type-equal?) #'(flat-named-contract 'Natural (and/c exact-integer? (lambda (x) (>= x 0))))]
+            [(== t:-NegInt type-equal?) #'(flat-named-contract 'Negative-Integer (and/c exact-integer? negative?))]
+            [(== t:-NonPosInt type-equal?) #'(flat-named-contract 'Nonpositive-Integer (and/c exact-integer? (lambda (x) (<= x 0))))]
+            [(== t:-Int type-equal?) #'(flat-named-contract 'Integer exact-integer?)]
+            [(== t:-PosRat type-equal?) #'(flat-named-contract 'Positive-Rational (and/c t:exact-rational? positive?))]
+            [(== t:-NonNegRat type-equal?) #'(flat-named-contract 'Nonnegative-Rational (and/c t:exact-rational? (lambda (x) (>= x 0))))]
+            [(== t:-NegRat type-equal?) #'(flat-named-contract 'Negative-Rational (and/c t:exact-rational? negative?))]
+            [(== t:-NonPosRat type-equal?) #'(flat-named-contract 'Nonpositive-Rational (and/c t:exact-rational? (lambda (x) (<= x 0))))]
+            [(== t:-Rat type-equal?) #'(flat-named-contract 'Rational t:exact-rational?)]
+            [(== t:-FlonumZero type-equal?) #'(flat-named-contract 'Float-Zero (and/c flonum? zero?))]
+            [(== t:-NonNegFlonum type-equal?) #'(flat-named-contract 'Nonnegative-Float (and/c flonum? (lambda (x) (not (< x 0)))))]
+            [(== t:-NonPosFlonum type-equal?) #'(flat-named-contract 'Nonpositive-Float (and/c flonum? (lambda (x) (not (> x 0)))))]
+            [(== t:-NegFlonum type-equal?) #'(flat-named-contract 'Negative-Float (and/c flonum? (lambda (x) (not (>= x 0)))))]
+            [(== t:-PosFlonum type-equal?) #'(flat-named-contract 'Positive-Float (and/c flonum? (lambda (x) (not (<= x 0)))))]
+            [(== t:-Flonum type-equal?) #'(flat-named-contract 'Float flonum?)]
+            [(== t:-SingleFlonumZero type-equal?) #'(flat-named-contract 'Single-Flonum-Zero (and/c single-flonum? zero?))]
+            [(== t:-InexactRealZero type-equal?) #'(flat-named-contract 'Inexact-Real-Zero (and/c inexact-real? zero?))]
+            [(== t:-PosSingleFlonum type-equal?) #'(flat-named-contract 'Positive-Single-Flonum (and/c single-flonum? (lambda (x) (not (<= x 0)))))]
+            [(== t:-PosInexactReal type-equal?) #'(flat-named-contract 'Positive-Inexact-Real (and/c inexact-real? (lambda (x) (not (<= x 0)))))]
+            [(== t:-NonNegSingleFlonum type-equal?) #'(flat-named-contract 'Nonnegative-Single-Flonum (and/c single-flonum? (lambda (x) (not (< x 0)))))]
+            [(== t:-NonNegInexactReal type-equal?) #'(flat-named-contract 'Nonnegative-Inexact-Real (and/c inexact-real? (lambda (x) (not (< x 0)))))]
+            [(== t:-NegSingleFlonum type-equal?) #'(flat-named-contract 'Negative-Single-Flonum (and/c single-flonum? (lambda (x) (not (>= x 0)))))]
+            [(== t:-NegInexactReal type-equal?) #'(flat-named-contract 'Negative-Inexact-Real (and/c inexact-real? (lambda (x) (not (>= x 0)))))]
+            [(== t:-NonPosSingleFlonum type-equal?) #'(flat-named-contract 'Nonpositive-Single-Flonum (and/c single-flonum? (lambda (x) (not (> x 0)))))]
+            [(== t:-NonPosInexactReal type-equal?) #'(flat-named-contract 'Nonpositive-Inexact-Real (and/c inexact-real? (lambda (x) (not (> x 0)))))]
+            [(== t:-SingleFlonum type-equal?) #'(flat-named-contract 'Single-Flonum single-flonum?)]
+            [(== t:-InexactReal type-equal?) #'(flat-named-contract 'Inexact-Real inexact-real?)]
+            [(== t:-RealZero type-equal?) #'(flat-named-contract 'Real-Zero (and/c real? zero?))]
+            [(== t:-PosReal type-equal?) #'(flat-named-contract 'Positive-Real (and/c real? (lambda (x) (not (<= x 0)))))]
+            [(== t:-NonNegReal type-equal?) #'(flat-named-contract 'Nonnegative-Real (and/c real? (lambda (x) (not (< x 0)))))]
+            [(== t:-NegReal type-equal?) #'(flat-named-contract 'Negative-Real (and/c real? (lambda (x) (not (>= x 0)))))]
+            [(== t:-NonPosReal type-equal?) #'(flat-named-contract 'Nonpositive-Real (and/c real? (lambda (x) (not (> x 0)))))]
+            [(== t:-Real type-equal?) #'(flat-named-contract 'Real real?)]
+            [(== t:-ExactNumber type-equal?) #'(flat-named-contract 'Exact-Number (and/c number? exact?))]
+            [(== t:-InexactComplex type-equal?)
+             #'(flat-named-contract 'Inexact-Complex
+                                    (and/c number?
+                                           (lambda (x)
+                                             (and (inexact-real? (imag-part x))
+                                                  (inexact-real? (real-part x))))))]
+            [(== t:-Number type-equal?) #'(flat-named-contract 'Number number?)]
+            [(Base: sym cnt _ _ _) #`(flat-named-contract '#,sym (flat-contract-predicate #,cnt))]
+            [(Refinement: par p? cert) (t->c par)]
+            [(Union: elems)
+             (let-values ([(vars notvars) (partition F? elems)])
+               (unless (>= 1 (length vars)) (exit (fail)))
+               (with-syntax
+                   ([cnts (append (map t->c vars) (map t->c notvars))])
+                 #'(or/c . cnts)))]
+            [(and t (Function: _)) (t->c/fun t)]
+            [(Set: t)
+             #`(set/c #,(t->c t #:kind (contract-kind-min kind chaperone-sym)))]
+            [(Sequence: ts) #`(sequence/c #,@(map t->c ts))]
+            [(Vector: t)
+             (set-chaperone!)
+             #`(vectorof #,(t->c/both t))]
+            [(HeterogeneousVector: ts)
+             (set-chaperone!)
+             #`(vector/c #,@(map t->c/both ts))]
+            [(Box: t)
+             (set-chaperone!)
+             #`(box/c #,(t->c/both t))]
+            [(Pair: t1 t2)
+             #`(cons/c #,(t->c t1) #,(t->c t2))]
+            [(Promise: t)
+             (set-chaperone!)
+             #`(promise/c #,(t->c t))]
+            [(Opaque: p? cert)
+             #`(flat-named-contract (quote #,(syntax-e p?)) #,p?)]
+            [(Continuation-Mark-Keyof: t)
+             (set-chaperone!)
+             #`(continuation-mark-key/c #,(t->c/both t))]
+            ;; TODO: this is not quite right for case->
+            [(Prompt-Tagof: s (Function: (list (arr: (list ts ...) _ _ _ _))))
+             (set-chaperone!)
+             #`(prompt-tag/c #,@(map t->c/both ts) #:call/cc #,(t->c/both s))]
+            [(Evt: t)
+             (set-chaperone!)
+             #`(evt/c #,(t->c/both t))]
+            ;; TODO
+            [(F: v) (cond [(assoc v (vars)) => second]
+                          [else (int-err "unknown var: ~a" v)])]
+            [(Poly: vs b)
+             ;; Don't generate poly contracts for non-functions
+             (define function-type?
+               (let loop ([ty ty])
+                 (match (resolve ty)
+                   [(Function: _) #t]
+                   [(Union: elems) (andmap loop elems)]
+                   [(Poly: _ body) (loop body)]
+                   [(PolyDots: _ body) (loop body)]
+                   [_ #f])))
+             (unless function-type?
+               (exit (fail)))
+             (if (not (from-untyped? typed-side))
+                 ;; in typed positions, no checking needed for the variables
+                 (parameterize ([vars (append (for/list ([v (in-list vs)]) (list v #'any/c)) (vars))])
+                   (t->c b))
+                 ;; in untyped positions, use `parameteric/c'
+                 (match-let ([(Poly-names: vs-nm _) ty])
+                            (with-syntax ([(v ...) (generate-temporaries vs-nm)])
+                              (set-impersonator!)
+                              (parameterize ([vars (append (stx-map list vs #'(v ...))
+                                                           (vars))]
+                                             [current-contract-cache #f]
+                                             [current-contract-types #f])
+                                #`(parametric->/c (v ...) #,(t->c b))))))]
+            [(Mu: n b)
+             (match-let ([(Mu-name: n-nm _) ty])
+                        (with-syntax ([(n*) (generate-temporaries (list n-nm))])
+                          (parameterize ([vars (cons (list n #'n*) (vars))]
+                                         [current-contract-cache #f]
+                                         [current-contract-types #f]
+                                         [current-contract-kind
+                                          (contract-kind-min kind chaperone-sym)])
+                            (define ctc (t->c/both b))
+                            #`(letrec ([n* (recursive-contract
+                                            #,ctc
+                                            #,(contract-kind->keyword
+                                               (current-contract-kind)))])
+                                n*))))]
+            [(Instance: (? Mu? t))
+             (t->c (make-Instance (resolve-once t)))]
+            [(Instance: (Class: _ _ (list (list name fcn) ...)))
+             (set-impersonator!)
+             (with-syntax ([(fcn-cnts ...) (for/list ([f (in-list fcn)]) (t->c/fun f #:method #t))]
+                           [(names ...) name])
+               #'(object/c (names fcn-cnts) ...))]
+            ;; init args not currently handled by class/c
+            [(Class: _ (list (list by-name-init by-name-init-ty _) ...) (list (list name fcn) ...))
+             (set-impersonator!)
+             (with-syntax ([(fcn-cnt ...) (for/list ([f (in-list fcn)]) (t->c/fun f #:method #t))]
+                           [(name ...) name]
+                           [(by-name-cnt ...) (for/list ([t (in-list by-name-init-ty)]) (t->c/neg t))]
+                           [(by-name-init ...) by-name-init])
+               #'(class/c (name fcn-cnt) ... (init [by-name-init by-name-cnt] ...)))]
+            [(Value: '()) #'null?]
+            [(Struct: nm par (list (fld: flds acc-ids mut?) ...) proc poly? pred?)
+             (cond
+              [(assf (λ (t) (type-equal? t ty)) structs-seen)
+               =>
+               cdr]
+              [proc (exit (fail))]
+              [(and (equal? kind flat-sym) (ormap values mut?))
+               (exit (fail))]
+              [poly?
+               (with-syntax* ([struct-ctc (generate-temporary 'struct-ctc)])
+                             (define field-contracts
+                               (for/list ([fty (in-list flds)] [mut? (in-list mut?)])
+                                 (with-syntax* ([rec (generate-temporary 'rec)])
+                                               (define required-recursive-kind
+                                                 (contract-kind-min kind (if mut? impersonator-sym chaperone-sym)))
+                                               (define t->c/mut (if mut? t->c/both t->c))
+                                        ;(printf "kind: ~a mut-k: ~a req-rec-kind: ~a\n" kind (if mut? impersonator-sym chaperone-sym) required-recursive-kind)
+                                               (parameterize ((current-contract-kind (contract-kind-min kind chaperone-sym)))
+                                                 (let ((fld-ctc (t->c/mut fty #:seen (cons (cons ty #'rec) structs-seen)
+                                                                          #:kind required-recursive-kind)))
+                                                   #`(let ((rec (recursive-contract struct-ctc #,(contract-kind->keyword (current-contract-kind)))))
+                                                       #,fld-ctc))))))
+                             #`(letrec ((struct-ctc (struct/c #,nm #,@field-contracts))) struct-ctc))]
+              [else #`(flat-named-contract '#,(syntax-e pred?) #,pred?)])]
+            [(Syntax: (Base: 'Symbol _ _ _ _)) #'identifier?]
+            [(Syntax: t)
+             #`(syntax/c #,(t->c t #:kind flat-sym))]
+            [(Value: v) #`(flat-named-contract '#,v (lambda (x) (equal? x '#,v)))]
+            ;; TODO Is this sound?
+            [(Param: in out)
+             (set-impersonator!)
+             #`(parameter/c #,(t->c in) #,(t->c out))]
+            [(Hashtable: k v)
+             (when (equal? kind flat-sym) (exit (fail)))
+             #`(hash/c #,(t->c k #:kind chaperone-sym) #,(t->c v) #:immutable 'dont-care)]
+            [else
+             (exit (fail))]))
+        (cond [cache
+               (define id (generate-temporary))
+               (dict-set! cache ty (list id ctc))
+               (define types-box (current-contract-types))
+               (set-box! types-box (cons ty (unbox types-box)))
+               id]
+              [else ctc])]))))
 
 
