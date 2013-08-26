@@ -54,6 +54,9 @@
               #:Filter sf
               #:Object (lambda (f) (subst-object f k o polarity)))
               t
+              ;; FIXME: this is probably not the right solution in general
+              ;; (taking this out slows down type-checking of classes by an extreme amount)
+              [#:Instance _ t]
               [#:arr dom rng rest drest kws
                      (let* ([st* (if (pair? k)
                                      ;; Add a scope if we are substituting an index and
