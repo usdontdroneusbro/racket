@@ -913,12 +913,10 @@
 ;; This is a custom constructor for Row types
 ;; Sorts all clauses by the key (the clause name)
 (define (Row* inits fields methods augments)
-  (define (sort-clauses clauses)
-    (sort clauses symbol<? #:key car))
-  (*Row (sort-clauses inits)
-        (sort-clauses fields)
-        (sort-clauses methods)
-        (sort-clauses augments)))
+  (*Row (sort-row-clauses inits)
+        (sort-row-clauses fields)
+        (sort-row-clauses methods)
+        (sort-row-clauses augments)))
 
 ;; Class*
 ;; This is a custom constructor for Class types that
@@ -939,7 +937,6 @@
 
 ;; helper function for the expansion of Class:*
 ;; just does the merging
-;; FIXME: should retain sorting invariant on row
 (define (merge-class/row class-type)
   (define row (Class-row-ext class-type))
   (define class-row (Class-row class-type))
@@ -953,11 +950,18 @@
          (define row-methods (Row-methods row))
          (define row-augments (Row-augments row))
          (list row
-               (append inits row-inits)
-               (append fields row-fields)
-               (append methods row-methods)
-               (append augments row-augments))]
+               ;; FIXME: instead of sorting here every time
+               ;;        the match expander is called, the row
+               ;;        fields should be merged on substitution
+               (sort-row-clauses (append inits row-inits))
+               (sort-row-clauses (append fields row-fields))
+               (sort-row-clauses (append methods row-methods))
+               (sort-row-clauses (append augments row-augments)))]
         [else (list row inits fields methods augments)]))
+
+;; sorts the given field of a Row by the member name
+(define (sort-row-clauses clauses)
+  (sort clauses symbol<? #:key car))
 
 (define-match-expander Class:*
   (λ (stx)
