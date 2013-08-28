@@ -571,12 +571,12 @@
                      (match-define (list name type) (car map))
                      (match-define (list name* type*) (car map*))
                      (cond [;; quit if 2nd obj lacks a name in 1st obj
-                            (symbol<? name name*)
+                            (symbol<? name* name)
                             #f]
                            [;; if 1st obj lacks a name in 2nd obj, try
                             ;; the next one
-                            (symbol<? name* name)
-                            (loop A map (cdr map*))]
+                            (symbol<? name name*)
+                            (loop A (cdr map) map*)]
                            [else
                             (define A* (subtype* A type type*))
                             (and A* (loop A* (cdr map) (cdr map*)))])])))
