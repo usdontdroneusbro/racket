@@ -525,10 +525,10 @@
 
 ;;; Utilities for (Class ...) type parsing
 
-;; process-class-clauses : Option<F> Syntax FieldDict MethodDict AugmentDict
+;; process-class-clauses : Option<F> Type Stx FieldDict MethodDict AugmentDict
 ;;                         -> Option<Id> FieldDict MethodDict AugmentDict
 ;; Merges #:implements class type and the current class clauses appropriately
-(define (merge-with-parent-type row-var stx fields methods augments)
+(define (merge-with-parent-type row-var parent-type parent-stx fields methods augments)
   ;; (Listof Symbol) Dict Dict String -> (Values Dict Dict)
   ;; check for duplicates in a class clause
   (define (check-duplicate-clause names super-names types super-types err-msg)
@@ -544,16 +544,13 @@
                    (dict-remove types maybe-dup) super-types
                    err-msg)]
                  [else
-                  (tc-error/stx stx err-msg maybe-dup)])]
+                  (tc-error/stx parent-stx err-msg maybe-dup)])]
           [else (values types super-types)]))
 
-  (define parent-type (parse-type stx))
   (define (match-parent-type parent-type)
-    (match parent-type
+    (match (resolve parent-type)
       [(Class: row-var _ fields methods augments)
        (values row-var fields methods augments)]
-      [(? Mu?)
-       (match-parent-type (unfold parent-type))]
       [_ (tc-error "expected a class type for #:implements clause, got ~a"
                    parent-type)]))
   (define-values (super-row-var super-fields
@@ -631,8 +628,8 @@
   (syntax-parse stx
     [(kw (~var clause (class-type-clauses parse-type)))
      (add-disappeared-use #'kw)
-
-     (define parent-types (stx->list #'clause.extends-types))
+     (define parent-stxs (stx->list #'clause.extends-types))
+     (define parent-types (map parse-type parent-stxs))
      (define given-inits (attribute clause.inits))
      (define given-fields (attribute clause.fields))
      (define given-methods (attribute clause.methods))
@@ -641,31 +638,41 @@
        (and (attribute clause.row-var)
             (parse-type (attribute clause.row-var))))
 
-     (check-function-types given-methods)
-     (check-function-types given-augments)
+     ;; Only proceed to create a class type when the parsing
+     ;; process isn't looking for recursive type alias references.
+     ;; (otherwise the merging process will error)
+     (cond [(not (current-referenced-aliases))
 
-     ;; merge with all given parent types, erroring if needed
-     (define-values (row-var fields methods augments)
-      (for/fold ([row-var given-row-var]
-                 [fields given-fields]
-                 [methods given-methods]
-                 [augments given-augments])
-                ([parent-type parent-types])
-        (merge-with-parent-type row-var parent-type fields
-                                methods augments)))
+            (check-function-types given-methods)
+            (check-function-types given-augments)
 
-     ;; check constraints on row var for consistency with class
-     (when (and row-var (has-row-constraints? (F-n row-var)))
-       (define constraints (lookup-row-constraints (F-n row-var)))
-       (check-constraints given-inits (car constraints))
-       (check-constraints fields (cadr constraints))
-       (check-constraints methods (caddr constraints))
-       (check-constraints augments (cadddr constraints)))
+            ;; merge with all given parent types, erroring if needed
+            (define-values (row-var fields methods augments)
+              (for/fold ([row-var given-row-var]
+                         [fields given-fields]
+                         [methods given-methods]
+                         [augments given-augments])
+                  ([parent-type parent-types]
+                   [parent-stx  parent-stxs])
+                ;; FIXME: this should check to avoid cycles in the
+                ;;        #:implements clauses because those are not
+                ;;        well-founded in any sense
+                (merge-with-parent-type row-var parent-type parent-stx
+                                        fields methods augments)))
 
-     (define class-type
-       (make-Class row-var given-inits fields methods augments))
+            ;; check constraints on row var for consistency with class
+            (when (and row-var (has-row-constraints? (F-n row-var)))
+              (define constraints (lookup-row-constraints (F-n row-var)))
+              (check-constraints given-inits (car constraints))
+              (check-constraints fields (cadr constraints))
+              (check-constraints methods (caddr constraints))
+              (check-constraints augments (cadddr constraints)))
 
-     class-type]))
+            (define class-type
+              (make-Class row-var given-inits fields methods augments))
+
+            class-type]
+           [else (make-Error)])]))
 
 ;; check-function-types : Dict<Name, Type> -> Void
 ;; ensure all types recorded in the dictionary are function types

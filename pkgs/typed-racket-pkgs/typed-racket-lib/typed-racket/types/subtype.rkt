@@ -565,6 +565,16 @@
                        (subtype* s-out t-out))]
          [((Param: in out) t)
           (subtype* A0 (cl->* (-> out) (-> in -Void)) t)]
+         [((Instance: (? needs-resolving? s)) other)
+          (let ([s* (resolve-once s)])
+            (if (Type/c? s*)
+                (subtype* A0 (make-Instance s*) other)
+                #f))]
+         [(other (Instance: (? needs-resolving? t)))
+          (let ([t* (resolve-once t)])
+            (if (Type/c? t*)
+                (subtype* A0 other (make-Instance t*))
+                #f))]
          [((Instance: (Class: _ _ field-map method-map augment-map))
            (Instance: (Class: _ _ field-map* method-map* augment-map*)))
           (define (subtype-clause? map map*)

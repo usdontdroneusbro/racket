@@ -17,7 +17,7 @@
  racket/match syntax/stx racket/syntax racket/list
  racket/format
  unstable/list
- racket/dict
+ racket/dict racket/set
  (only-in racket/set set-intersect set-subtract)
  unstable/sequence
  (contract-req)
@@ -115,6 +115,7 @@
 ;; Some type->contract translations are deferred, so resolve
 ;; those here and leave everything else as is.
 (define (change-contract-fixups forms)
+  (define seen-types (mutable-set))
   (parameterize ([current-contract-cache (make-hasheq)]
                  [current-contract-types (box '())])
     (let loop ([results '()] [exprs (syntax->list forms)])
@@ -127,8 +128,10 @@
              ;; name them to reduce the size of the resulting syntax
              (define cache (current-contract-cache))
              (define type-box (current-contract-types))
+             (define types (reverse (remove-duplicates (reverse (unbox type-box)))))
              (define defs
-               (for/list ([type (in-list (unbox type-box))])
+               (for/list ([type (in-list types)]
+                          #:unless (set-member? seen-types type))
                  (define name+ctc (dict-ref cache type))
                  (match-define (list name ctc) name+ctc)
                  #`(define #,name #,ctc)))
@@ -136,6 +139,7 @@
              ;; generates contracts for types it refers to
              ;; (this prevents unbound id errors due to require
              ;;  depdendencies, e.g., from Opaque types)
+             (set-union! seen-types (list->mutable-set (unbox type-box)))
              (set-box! type-box '())
              (loop (append (cons fixed-up-e defs) results)
                    (cdr exprs))]))))
@@ -187,6 +191,10 @@
    [(untyped) 'typed]
    [(both) 'both]))
 
+;; method? : Parameterof<Boolean>
+;; Parameter used by `type->contract` to determine whether to
+;; create ->m contracts for methods or -> contracts
+(define method? (make-parameter #f))
 
 (define (type->contract ty fail #:typed-side [typed-side #t] #:kind [kind 'impersonator])
   (define vars (make-parameter '()))  
@@ -201,7 +209,7 @@
         (loop t (flip-side typed-side) structs-seen kind))
       (define (t->c/both t #:seen [structs-seen structs-seen] #:kind [kind kind])
         (loop t 'both structs-seen kind))
-      (define (t->c/fun f #:method [method? #f])
+      (define (t->c/fun f)
         (match f
           [(Function: (list (top-arr:)))
            (set-chaperone!)
@@ -213,7 +221,7 @@
            ;; (and don't otherwise require full `case->')
            (define conv (match-lambda [(Keyword: kw kty _) (list kw (t->c/neg kty))]))
            (define (partition-kws kws) (partition (match-lambda [(Keyword: _ _ mand?) mand?]) kws))
-           (define (process-dom dom*)  (if method? (cons #'any/c dom*) dom*))
+           (define (process-dom dom*)  (if (method?) (cons #'any/c dom*) dom*))
            (define (process-rngs rngs*)
              (match rngs*
                [(list r) r]
@@ -343,12 +351,12 @@
         ;; Applications of a potentially polymorphically
         ;; recursive type constructor turns into a contract
         ;; function application.
-        [(App: (and rator (Name: stx _ _ _ #f)) rands _)
+        [(App: (and rator (Name: _ _ _ _ #f)) rands _)
          #`(#,(t->c rator) #,@(map t->c rands))]
         ;; A recursive name depends on other type aliases,
         ;; possibly in mutual recursion. The contract will recur
         ;; on all dependencies as a conservative approximation.
-        [(Name: stx _ deps args #f)
+        [(Name: _ orig-id deps args #f)
          ;; Name -> Syntax
          ;; Construct a contract function that corresponds to
          ;; a type operator
@@ -365,30 +373,35 @@
                  [else #`(recursive-contract
                           #,(t->c/both (resolve-once ty))
                           #,kind)]))
-         (define n (syntax-e stx))
+         (define n (syntax-e orig-id))
          (cond [;; When this is a recursive reference, just use
                 ;; the identifier stored in the environment.
                 (assoc n (vars)) => second]
                [else
                 (define/with-syntax (n* dep ...)
                   (generate-temporaries (cons n deps)))
-                (parameterize ([vars (append (list (list n #'n*))
-                                             (map list deps (syntax->list #'(dep ...)))
-                                             (vars))])
+                (define dep-vars
+                  (map list (map syntax-e deps) (syntax->list #'(dep ...))))
+                (parameterize ([vars (cons (list n #'n*)
+                                           (append dep-vars (vars)))]
+                               [current-contract-kind
+                                ;; FIXME: is this correct at all?
+                                (contract-kind-min kind impersonator-sym)]
+                               [current-contract-cache #f]
+                               [current-contract-types #f])
                   ;; Construct contracts for each of the other type
                   ;; aliases that are depended on by the current type
                   ;; alias to establish the mutual recursion.
                   (define ctc (make-recname-ctc ty))
-                  (define dep-types
+                  (define dep-ctcs
                     (for/list ([dep deps])
-                      (lookup-type-alias dep values)))
-                  (define dep-ctcs (map make-recname-ctc dep-types))
+                      (define dep-type (lookup-type-alias dep values))
+                      (if (Name? dep-type)
+                          (make-recname-ctc dep-type)
+                          (t->c/both dep-type))))
                   (define/with-syntax (dep-ctc ...) dep-ctcs)
                   #`(letrec ([n* #,ctc]
-                             [dep (recursive-contract
-                                   dep-ctc
-                                   #,(contract-kind->keyword
-                                      (current-contract-kind)))]
+                             [dep dep-ctc]
                              ...)
                       n*))])]
         [(or (App: _ _ _) (Name: _ _ _ _ #t))
@@ -504,6 +517,18 @@
         ;; TODO
         [(F: v) (cond [(assoc v (vars)) => second]
                       [else (int-err "unknown var: ~a" v)])]
+        ;; FIXME: should unwrap multiple Polys
+        [(Poly: vs type) (=> fail)
+         (define resolved (resolve type))
+         (unless (Class? resolved)
+           (fail))
+         (define poly-ids (generate-temporaries vs))
+         (define/with-syntax (all/c ...) poly-ids)
+         #`(let ([all/c (new-∀/c (quote all/c))] ...)
+             #,(parameterize ([vars (append (map list vs poly-ids) (vars))]
+                              [current-contract-cache #f]
+                              [current-contract-types #f])
+                 (t->c resolved)))]
         [(Poly: vs b)
          ;; Don't generate poly contracts for non-functions
          (define function-type?
@@ -566,26 +591,34 @@
                    n*))))]
         [(Instance: (? F? t))
          (t->c t)]
-        [(Instance: (? Mu? t))
+        [(Instance: (or (? Mu? t) (? Name? t)))
          #`(instanceof/c #,(t->c t))]
         [(Instance: (Class: _ _ _
                             (list (list name fcn) ...)
-                            (list (list aug-name aug-fcn) ...)))
+                            _))
          (set-impersonator!)
-         (with-syntax ([(fcn-cnts ...) (for/list ([f (in-list fcn)]) (t->c/fun f #:method #t))]
-                       [(aug-fcn-cnts ...)
-                        (for/list ([f (in-list aug-fcn)]) (t->c/fun f #:method #t))]
-                       [(names ...) name]
-                       [(aug-names ...) aug-name])
-           #'(object/c (names fcn-cnts) ...
-                       (aug-names aug-fcn-cnts) ...))]
+         (define (t->c/method t)
+           (parameterize ([method? #t]
+                          [current-contract-cache #f]
+                          [current-contract-types #f])
+             (t->c t)))
+         (with-syntax ([(fcn-cnts ...) (for/list ([f (in-list fcn)])
+                                         (t->c/method f))]
+                       [(names ...) name])
+           ;; FIXME: fields
+           #'(object/c (names fcn-cnts) ...))]
         ;; init args not currently handled by class/c
         [(Class: row-var
                  (list (list by-name-init by-name-init-ty _) ...)
-                 fields
+                 fields ; FIXME: generate contracts for these
                  (list (list name fcn) ...)
                  (list (list aug-name aug-fcn) ...))
          (set-impersonator!)
+         (define (t->c/method t)
+           (parameterize ([method? #t]
+                          [current-contract-cache #f]
+                          [current-contract-types #f])
+             (t->c t)))
          ;; Only apply a sealing contract if the type actually has
          ;; a row variable. In that case, look up the contract from
          ;; the vars parameter.
@@ -593,16 +626,16 @@
            (and (F? row-var) (second (assoc (F-n row-var) (vars)))))
          (define method-contract-map
            (for/hash ([n (in-list name)] [f (in-list fcn)])
-             (values n (t->c/fun f #:method #t))))
+             (values n (t->c/method f))))
          (define-values (public-names public-ctcs)
            (for/lists (_1 _2) ([k+v (in-hash-pairs method-contract-map)])
-             (values (car k+v) (cdr k+v))))
+                      (values (car k+v) (cdr k+v))))
          (define pubment-names (set-intersect name aug-name))
          (define override-names (set-subtract name pubment-names))
          (with-syntax ([(fcn-cnt ...) public-ctcs]
                        [(aug-fcn-cnt ...)
                         (for/list ([f (in-list aug-fcn)])
-                          (t->c/fun f #:method #t))]
+                          (t->c/method f))]
                        [(pubment-fcn-cnt ...)
                         (for/list ([name (in-list pubment-names)])
                           (hash-ref method-contract-map name))]
@@ -613,7 +646,8 @@
                        [(aug-name ...) aug-name]
                        [(pubment-name ...) pubment-names]
                        [(override-name ...) override-names]
-                       [(by-name-cnt ...) (for/list ([t (in-list by-name-init-ty)]) (t->c/neg t))]
+                       [(by-name-cnt ...) (for/list ([t (in-list by-name-init-ty)])
+                                            (t->c/neg t))]
                        [(by-name-init ...) by-name-init])
            (define class/c-stx
              #'(class/c
