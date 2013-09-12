@@ -102,7 +102,7 @@
   (define snips #f)
   (define last-snip #f)
 
-  (define snip-location-list (make-hasheq))
+  (define snip-location-list (make-hash))
   (define/private (snip-loc snip) (hash-ref snip-location-list snip #f))
 
   (define snip-admin (new standard-snip-admin% [editor this]))
@@ -231,7 +231,7 @@
                              ;; find snip:
                              (let ([snip (find-snip x y)])
                                (and snip
-                                    (eq? snip s-caret-snip)
+                                    (equal? snip s-caret-snip)
                                     (let-boxes ([x 0.0] [y 0.0])
                                         (get-snip-location snip x y)
                                       (let ([c (send snip adjust-cursor dc (- x scrollx) (- y scrolly) 
@@ -254,7 +254,7 @@
                         (values dc (+ x scrollx) (+ y scrolly) scrollx scrolly)))])
         (let ([snip (find-snip x y)])
           (when (and prev-mouse-snip
-                     (not (eq? snip prev-mouse-snip)))
+                     (not (equal? snip prev-mouse-snip)))
             (let ([loc (snip-loc prev-mouse-snip)])
               (send prev-mouse-snip on-event
                     dc (- (loc-x loc) scrollx) (- (loc-y loc) scrolly) 
@@ -263,7 +263,7 @@
           (set! prev-mouse-snip #f)
           (when (and snip
                      (has-flag? (snip->flags snip) HANDLES-ALL-MOUSE-EVENTS)
-                     (not (eq? snip s-caret-snip)))
+                     (not (equal? snip s-caret-snip)))
             (let ([loc (snip-loc snip)])
               (set! prev-mouse-snip snip)
               (send snip on-event
@@ -272,7 +272,7 @@
                     event)))
           (if (and s-caret-snip
                    (or (not (send event button-down?))
-                       (eq? snip s-caret-snip)))
+                       (equal? snip s-caret-snip)))
               (let ([loc (snip-loc s-caret-snip)])
                 (send s-caret-snip on-event
                       dc (- (loc-x loc) scrollx) (- (loc-y loc) scrolly) 
@@ -660,8 +660,8 @@
               (hash-set! snip-location-list snip loc)
             
               (set-snip-style! snip (send s-style-list convert (snip->style snip)))
-              (when (eq? (snip->style snip)
-                         (send s-style-list basic-style))
+              (when (equal? (snip->style snip)
+                            (send s-style-list basic-style))
                 (let ([s (get-default-style)])
                   (when s
                     (set-snip-style! snip s))))
@@ -750,7 +750,7 @@
   
   (define/private (-delete del-snip del)
     (when (snip-loc del-snip)
-      (when (eq? del-snip prev-mouse-snip)
+      (when (equal? del-snip prev-mouse-snip)
         (set! prev-mouse-snip #f))
       (set! write-locked (add1 write-locked))
       (begin-edit-sequence)
@@ -766,7 +766,7 @@
            (set! write-locked (sub1 write-locked))
            
            (let ([update-cursor?
-                  (and (eq? del-snip s-caret-snip)
+                  (and (equal? del-snip s-caret-snip)
                        (begin
                          (send s-caret-snip own-caret #f)
                          (set! s-caret-snip #f)
@@ -1027,8 +1027,8 @@
     (unless (or s-user-locked?
                 (not (zero? write-locked))
                 (not (snip-loc snip))
-                (eq? snip before)
-                (eq? snip after)
+                (equal? snip before)
+                (equal? snip after)
                 (and before (not (snip-loc before)))
                 (and after (not (snip-loc after))))
       (set! write-locked (add1 write-locked))
@@ -1090,11 +1090,11 @@
       ;; lock during set-admin! [???]
       (send snip set-admin a)
 
-      (if (not (eq? (send snip get-admin) a))
+      (if (not (equal? (send snip get-admin) a))
           ;; something went wrong
           (cond
            [(and (not a)
-                 (eq? (snip->admin snip) orig-admin))
+                 (equal? (snip->admin snip) orig-admin))
             ;; force admin to null
             (set-snip-admin! snip #f)
             snip]
@@ -1240,7 +1240,7 @@
                         
                         (send snip draw
                               dc x y dcx dcy dcr dcb dx dy 
-                              (if (eq? snip s-caret-snip)
+                              (if (equal? snip s-caret-snip)
                                   show-caret
                                   'no-caret))
 
@@ -1791,7 +1791,7 @@
         (do-buffer-paste cb time #f)
         
         (if (and s-admin
-                 (not (eq? snips start)))
+                 (not (equal? snips start)))
             (let ([dc (get-dc)])
               (when dc
                 ;; get top/left/bottom/right of pasted group:
@@ -1800,7 +1800,7 @@
                            [top +inf.0]
                            [right -inf.0]
                            [bottom -inf.0])
-                  (if (eq? snip start)
+                  (if (equal? snip start)
                       (let ([dx (- cx (/ (left + right) 2))]
                             [dy (- cy (/ (top + bottom) 2))])
                         ;; shift the pasted group to center:
@@ -1816,7 +1816,7 @@
                               (max (loc-b loc) bottom)))))))
             ;; just select them:
             (let loop ([snip snips])
-              (unless (eq? snip start)
+              (unless (equal? snip start)
                 (add-selected snip)
                 (loop (snip->next snip))))))))
 
