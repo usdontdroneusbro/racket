@@ -12,6 +12,7 @@
 	 data/queue
          racket/dict
          racket/format
+         racket/list
          racket/match
          syntax/id-table
          syntax/kerncase
@@ -144,7 +145,8 @@
       (define type
         (parameterize ([current-referenced-aliases links-box])
           (parse-type (cadr alias-info))))
-      (define pre-dependencies (unbox links-box))
+      (define pre-dependencies
+        (remove-duplicates (unbox links-box) free-identifier=?))
       (define alias-dependencies
         (filter (λ (id) (memf (λ (id2) (free-identifier=? id id2))
                               type-alias-names))
