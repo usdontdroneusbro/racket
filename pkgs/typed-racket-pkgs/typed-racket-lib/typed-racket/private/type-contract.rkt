@@ -8,9 +8,9 @@
 (require
  "../utils/utils.rkt"
  syntax/parse
- (rep type-rep filter-rep object-rep)
+ (rep type-rep filter-rep object-rep rep-utils)
  (utils tc-utils)
- (env type-name-env)
+ (env type-alias-env type-name-env)
  (types resolve utils)
  (prefix-in t: (types abbrev numeric-tower))
  (private parse-type syntax-properties)
@@ -341,10 +341,36 @@
                           " only generate a higher-order contract."))))
         (increase-current-contract-kind! chaperone-sym))
 
+      ;; t->c/poly-row : PolyRow -> Syntax
+      ;; Helper function to create a contract for row poly types
+      (define (t->c/poly-row type)
+        (match-define (PolyRow: vs _ b) type)
+        (cond [(not (from-untyped? typed-side))
+               ;; see Poly
+               (parameterize ([vars (append (for/list ([v (in-list vs)])
+                                              (list v #'any/c))
+                                            (vars))])
+                 (t->c b))]
+              [else
+               ;; extend row constraints and let Class contract
+               ;; generation figure out whether to use sealing or
+               ;; unsealing
+               (match-define (PolyRow-names: vs-nm constraints _) ty)
+               (define/with-syntax seal/c (generate-temporary))
+               (set-impersonator!)
+               (parameterize ([vars (cons (list (car vs) #'seal/c) (vars))])
+                 #`(let ([seal/c (new-seal/c #,(car constraints)
+                                             #,(cadr constraints)
+                                             #,(caddr constraints))])
+                     #,(t->c b)))]))
+
+      (define (t->c/method t)
+        (cond [(PolyRow? t) (t->c/poly-row t)]
+              [else (t->c/fun t)]))
 
       (define cache (current-contract-cache))
   (cond
-   [(and cache (dict-ref cache ty #f)) => car]
+   [(and cache (dict-ref cache (Type-seq ty) #f)) => car]
    [else
     (define ctc
       (match ty
@@ -386,9 +412,7 @@
                                            (append dep-vars (vars)))]
                                [current-contract-kind
                                 ;; FIXME: is this correct at all?
-                                (contract-kind-min kind impersonator-sym)]
-                               [current-contract-cache #f]
-                               [current-contract-types #f])
+                                (contract-kind-min kind impersonator-sym)])
                   ;; Construct contracts for each of the other type
                   ;; aliases that are depended on by the current type
                   ;; alias to establish the mutual recursion.
@@ -525,9 +549,7 @@
          (define poly-ids (generate-temporaries vs))
          (define/with-syntax (all/c ...) poly-ids)
          #`(let ([all/c (new-∀/c (quote all/c))] ...)
-             #,(parameterize ([vars (append (map list vs poly-ids) (vars))]
-                              [current-contract-cache #f]
-                              [current-contract-types #f])
+             #,(parameterize ([vars (append (map list vs poly-ids) (vars))])
                  (t->c resolved)))]
         [(Poly: vs b)
          ;; Don't generate poly contracts for non-functions
@@ -550,37 +572,13 @@
                (with-syntax ([(v ...) (generate-temporaries vs-nm)])
                  (set-impersonator!)
                  (parameterize ([vars (append (stx-map list vs #'(v ...))
-                                              (vars))]
-                                [current-contract-cache #f]
-                                [current-contract-types #f])
+                                              (vars))])
                    #`(parametric->/c (v ...) #,(t->c b))))))]
-        [(PolyRow: vs _ b)
-         (cond [(not (from-untyped? typed-side))
-                ;; see Poly
-                (parameterize ([vars (append (for/list ([v (in-list vs)])
-                                               (list v #'any/c))
-                                             (vars))])
-                  (t->c b))]
-               [else
-                ;; extend row constraints and let Class contract
-                ;; generation figure out whether to use sealing or
-                ;; unsealing
-                (match-define (PolyRow-names: vs-nm constraints _) ty)
-                (define/with-syntax seal/c (generate-temporary))
-                (set-impersonator!)
-                (parameterize ([vars (cons (list (car vs) #'seal/c) (vars))]
-                               [current-contract-cache #f]
-                               [current-contract-types #f])
-                  #`(let ([seal/c (new-seal/c #,(car constraints)
-                                              #,(cadr constraints)
-                                              #,(caddr constraints))])
-                      #,(t->c b)))])]
+        [(? PolyRow?) (t->c/poly-row ty)]
         [(Mu: n b)
          (match-let ([(Mu-name: n-nm _) ty])
            (with-syntax ([(n*) (generate-temporaries (list n-nm))])
              (parameterize ([vars (cons (list n #'n*) (vars))]
-                            [current-contract-cache #f]
-                            [current-contract-types #f]
                             [current-contract-kind
                              (contract-kind-min kind chaperone-sym)])
                (define ctc (t->c/both b))
@@ -597,11 +595,6 @@
                             (list (list name fcn) ...)
                             _))
          (set-impersonator!)
-         (define (t->c/method t)
-           (parameterize ([method? #t]
-                          [current-contract-cache #f]
-                          [current-contract-types #f])
-             (t->c t)))
          (with-syntax ([(fcn-cnts ...) (for/list ([f (in-list fcn)])
                                          (t->c/method f))]
                        [(names ...) name])
@@ -614,11 +607,6 @@
                  (list (list name fcn) ...)
                  (list (list aug-name aug-fcn) ...))
          (set-impersonator!)
-         (define (t->c/method t)
-           (parameterize ([method? #t]
-                          [current-contract-cache #f]
-                          [current-contract-types #f])
-             (t->c t)))
          ;; Only apply a sealing contract if the type actually has
          ;; a row variable. In that case, look up the contract from
          ;; the vars parameter.
@@ -626,10 +614,11 @@
            (and (F? row-var) (second (assoc (F-n row-var) (vars)))))
          (define method-contract-map
            (for/hash ([n (in-list name)] [f (in-list fcn)])
-             (values n (t->c/method f))))
-         (define-values (public-names public-ctcs)
-           (for/lists (_1 _2) ([k+v (in-hash-pairs method-contract-map)])
-                      (values (car k+v) (cdr k+v))))
+             (values n (list (generate-temporary n)
+                             (t->c/method f)))))
+         (define-values (public-names public-gens public-ctcs)
+           (for/lists (_1 _2 _3) ([k+v (in-hash-pairs method-contract-map)])
+             (values (car k+v) (car (cdr k+v)) (cadr (cdr k+v)))))
          (define pubment-names (set-intersect name aug-name))
          (define override-names (set-subtract name pubment-names))
          (with-syntax ([(fcn-cnt ...) public-ctcs]
@@ -638,10 +627,10 @@
                           (t->c/method f))]
                        [(pubment-fcn-cnt ...)
                         (for/list ([name (in-list pubment-names)])
-                          (hash-ref method-contract-map name))]
+                          (car (hash-ref method-contract-map name)))]
                        [(override-fcn-cnt ...)
                         (for/list ([name (in-list override-names)])
-                          (hash-ref method-contract-map name))]
+                          (car (hash-ref method-contract-map name)))]
                        [(name ...) public-names]
                        [(aug-name ...) aug-name]
                        [(pubment-name ...) pubment-names]
@@ -650,14 +639,17 @@
                                             (t->c/neg t))]
                        [(by-name-init ...) by-name-init])
            (define class/c-stx
-             #'(class/c
-                (init [by-name-init by-name-cnt] ...)
-                (name fcn-cnt) ...
-                (inherit [name fcn-cnt]) ...
-                (super [override-name override-fcn-cnt]) ...
-                (inner [aug-name aug-fcn-cnt]) ...
-                (override [override-name override-fcn-cnt]) ...
-                (augment [pubment-name pubment-fcn-cnt]) ...))
+             #`(let #,(for/list ([ctc-name (in-list public-gens)]
+                                 [ctc (in-list public-ctcs)])
+                        #`[#,ctc-name #,ctc])
+                 (class/c
+                  (init [by-name-init by-name-cnt] ...)
+                  (name fcn-cnt) ...
+                  (inherit [name fcn-cnt]) ...
+                  (super [override-name override-fcn-cnt]) ...
+                  (inner [aug-name aug-fcn-cnt]) ...
+                  (override [override-name override-fcn-cnt]) ...
+                  (augment [pubment-name pubment-fcn-cnt]) ...)))
            (if seal/c
                #`(and/c #,seal/c #,class/c-stx)
                class/c-stx))]
@@ -701,12 +693,32 @@
          #`(hash/c #,(t->c k #:kind chaperone-sym) #,(t->c v) #:immutable 'dont-care)]
         [else
          (exit (fail #:reason "contract generation not supported for this type"))]))
-    (cond [cache
+    (cond [(and cache
+                ;; FIXME: factor this out into a helper function
+                (andmap (λ (var-pair)
+                          (define var (car var-pair))
+                          (not (or (member var (fv ty))
+                                   (has-name-free? var ty))))
+                        (vars)))
            (define id (generate-temporary))
-           (dict-set! cache ty (list id ctc))
+           (dict-set! cache (Type-seq ty) (list id ctc))
            (define types-box (current-contract-types))
-           (set-box! types-box (cons ty (unbox types-box)))
+           (set-box! types-box (cons (Type-seq ty) (unbox types-box)))
            id]
           [else ctc])]))))
 
+(define (has-name-free? name type)
+  (let/ec escape
+    (define (free-type? type)
+     (type-case
+      (#:Type free-type?)
+      type
+      [#:Name
+       id orig-id deps arg struct?
+       (cond [(eq? (syntax-e orig-id) name)
+              (escape #t)]
+             [else ;; dummy
+              (make-Value #f)])]))
+    (free-type? type)
+    #f))
 
