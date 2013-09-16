@@ -191,11 +191,6 @@
    [(untyped) 'typed]
    [(both) 'both]))
 
-;; method? : Parameterof<Boolean>
-;; Parameter used by `type->contract` to determine whether to
-;; create ->m contracts for methods or -> contracts
-(define method? (make-parameter #f))
-
 (define (type->contract ty fail #:typed-side [typed-side #t] #:kind [kind 'impersonator])
   (define vars (make-parameter '()))  
   (define current-contract-kind (make-parameter flat-sym))
@@ -209,7 +204,7 @@
         (loop t (flip-side typed-side) structs-seen kind))
       (define (t->c/both t #:seen [structs-seen structs-seen] #:kind [kind kind])
         (loop t 'both structs-seen kind))
-      (define (t->c/fun f)
+      (define (t->c/fun f #:method [method? #f])
         (match f
           [(Function: (list (top-arr:)))
            (set-chaperone!)
@@ -221,7 +216,7 @@
            ;; (and don't otherwise require full `case->')
            (define conv (match-lambda [(Keyword: kw kty _) (list kw (t->c/neg kty))]))
            (define (partition-kws kws) (partition (match-lambda [(Keyword: _ _ mand?) mand?]) kws))
-           (define (process-dom dom*)  (if (method?) (cons #'any/c dom*) dom*))
+           (define (process-dom dom*)  (if method? (cons #'any/c dom*) dom*))
            (define (process-rngs rngs*)
              (match rngs*
                [(list r) r]
@@ -343,14 +338,14 @@
 
       ;; t->c/poly-row : PolyRow -> Syntax
       ;; Helper function to create a contract for row poly types
-      (define (t->c/poly-row type)
+      (define (t->c/poly-row type #:method [method? #f])
         (match-define (PolyRow: vs _ b) type)
         (cond [(not (from-untyped? typed-side))
                ;; see Poly
                (parameterize ([vars (append (for/list ([v (in-list vs)])
                                               (list v #'any/c))
                                             (vars))])
-                 (t->c b))]
+                 (t->c/fun b #:method method?))]
               [else
                ;; extend row constraints and let Class contract
                ;; generation figure out whether to use sealing or
@@ -362,11 +357,11 @@
                  #`(let ([seal/c (new-seal/c #,(car constraints)
                                              #,(cadr constraints)
                                              #,(caddr constraints))])
-                     #,(t->c b)))]))
+                     #,(t->c/fun b #:method method?)))]))
 
       (define (t->c/method t)
-        (cond [(PolyRow? t) (t->c/poly-row t)]
-              [else (t->c/fun t)]))
+        (cond [(PolyRow? t) (t->c/poly-row t #:method #t)]
+              [else (t->c/fun t #:method #t)]))
 
       (define cache (current-contract-cache))
   (cond
