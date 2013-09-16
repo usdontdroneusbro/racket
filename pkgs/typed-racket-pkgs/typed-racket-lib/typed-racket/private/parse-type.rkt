@@ -9,8 +9,10 @@
          (utils tc-utils stxclass-util)
          syntax/stx (prefix-in c: (contract-req))
          syntax/parse unstable/sequence
-         (env tvar-env type-name-env type-alias-env lexical-env index-env)
+         (env tvar-env type-name-env type-alias-env
+              lexical-env index-env row-constraint-env)
          (only-in racket/list flatten)
+         racket/dict
          racket/format
          racket/match
          racket/syntax
