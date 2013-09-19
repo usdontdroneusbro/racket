@@ -35,7 +35,16 @@
                        [parse-tc-results/id (syntax? c:any/c . c:-> . tc-results/c)]
                        [parse-literal-alls (syntax? . c:-> . (c:listof (c:or/c (c:listof identifier?) (c:list/c (c:listof identifier?) identifier?))))])
 
-(provide star ddd/bound current-referenced-aliases)
+(provide star ddd/bound
+         current-referenced-aliases
+         current-referenced-class-parents
+         current-type-alias-name)
+
+;; current-type-alias-name : Parameter<(Option Id)>
+;; This parameter stores the name of the type alias that is
+;; being parsed (set in type-alias-helper.rkt), #f if the
+;; parsing is not for a type alias
+(define current-type-alias-name (make-parameter #f))
 
 ;; current-referenced-aliases : Parameter<Option<Box<List<Id>>>>
 ;; This parameter is used to coordinate with the type-checker to determine
@@ -45,6 +54,13 @@
 ;;         Otherwise, it should be a box containing a list of
 ;;         identifiers (i.e., type aliases in the syntax)
 (define current-referenced-aliases (make-parameter #f))
+
+;; current-referenced-aliases : Parameter<Option<Box<List<Id>>>>
+;; This parameter is used to coordinate with the type-checker about
+;; the dependency structure of class types using #:implements
+;;
+;; interp. same as above
+(define current-referenced-class-parents (make-parameter #f))
 
 ;; (Syntax -> Type) -> Syntax Any -> Syntax
 ;; See `parse-type/id`. This is a curried generalization.
@@ -550,11 +566,12 @@
           [else (values types super-types)]))
 
   (define (match-parent-type parent-type)
-    (match (resolve parent-type)
+    (define resolved (resolve parent-type))
+    (match resolved
       [(Class: row-var _ fields methods augments)
        (values row-var fields methods augments)]
       [_ (tc-error "expected a class type for #:implements clause, got ~a"
-                   parent-type)]))
+                   resolved)]))
   (define-values (super-row-var super-fields
                   super-methods super-augments)
     (match-parent-type parent-type))
@@ -643,7 +660,8 @@
      ;; Only proceed to create a class type when the parsing
      ;; process isn't looking for recursive type alias references.
      ;; (otherwise the merging process will error)
-     (cond [(not (current-referenced-aliases))
+     (cond [(or (null? parent-stxs)
+                (not (current-referenced-aliases)))
 
             (check-function-types given-methods)
             (check-function-types given-augments)
@@ -674,7 +692,29 @@
               (make-Class row-var given-inits fields methods augments))
 
             class-type]
-           [else (make-Error)])]))
+           [else
+            ;; Conservatively assume that if there *are* #:implements
+            ;; clauses, then the current type alias will be recursive
+            ;; through one of the type aliases in the #:implements clauses.
+            ;;
+            ;; This is needed because it's hard to determine if a type
+            ;; in the #:implements clauses depends on the current
+            ;; type alias at this point. Otherwise, we would have to
+            ;; parse all type aliases again.
+            ;;
+            ;; An example type that is a problem without this assumption is
+            ;;   alias = (Class #:implements Foo%) where Foo%
+            ;;           has a class clause referring to alias
+            ;; since "alias" will be a non-recursive alias
+            (define alias-box (current-referenced-aliases))
+            (set-box! alias-box (cons (current-type-alias-name)
+                                      (unbox alias-box)))
+            (define class-box (current-referenced-class-parents))
+            (set-box! class-box (append parent-stxs (unbox class-box)))
+            ;; Ok to return Error here, since this type will
+            ;; get reparsed in another pass
+            (make-Error)
+            ])]))
 
 ;; check-function-types : Dict<Name, Type> -> Void
 ;; ensure all types recorded in the dictionary are function types

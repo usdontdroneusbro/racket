@@ -138,12 +138,25 @@
 ;; this function.
 (define (register-all-type-aliases type-alias-names type-alias-map)
   ;; Find type alias dependencies
-  (define-values (type-alias-dependency-map type-alias-types)
-    (for/lists (_1 _2)
+  ;; The two maps defined here contains the dependency structure
+  ;; of type aliases in two senses:
+  ;;   (1) other type aliases referenced in a type alias
+  ;;   (2) other type aliases referenced by some class in a
+  ;;       type alias in a #:implements clause
+  ;;
+  ;; The second is necessary in order to prevent recursive
+  ;; #:implements clauses and to determine the order in which
+  ;; recursive type aliases should be initialized.
+  (define-values (type-alias-dependency-map type-alias-class-map
+                  type-alias-types)
+    (for/lists (_1 _2 _3)
       ([(name alias-info) (in-dict type-alias-map)])
       (define links-box (box null))
+      (define class-box (box null))
       (define type
-        (parameterize ([current-referenced-aliases links-box])
+        (parameterize ([current-type-alias-name name]
+                       [current-referenced-aliases links-box]
+                       [current-referenced-class-parents class-box])
           (parse-type (cadr alias-info))))
       (define pre-dependencies
         (remove-duplicates (unbox links-box) free-identifier=?))
@@ -151,45 +164,83 @@
         (filter (λ (id) (memf (λ (id2) (free-identifier=? id id2))
                               type-alias-names))
                 pre-dependencies))
-      (values (cons name alias-dependencies) type)))
+      (define class-dependencies
+        (filter (λ (id) (memf (λ (id2) (free-identifier=? id id2))
+                              type-alias-names))
+                (unbox class-box)))
+      (values (cons name alias-dependencies)
+              (cons name class-dependencies)
+              type)))
 
   (define components
     (find-strongly-connected-type-aliases type-alias-dependency-map))
 
+  (define class-components
+    (find-strongly-connected-type-aliases type-alias-class-map))
+
   ;; helper function for defining singletons
-  (define (has-self-cycle? component)
+  (define (has-self-cycle? component [map type-alias-dependency-map])
     (define id (car component))
     (memf (λ (id2) (free-identifier=? id id2))
-          (dict-ref type-alias-dependency-map id)))
+          (dict-ref map id)))
 
   ;; A singleton component can be either a self-cycle or a node that
   ;; that does not participate in cycles, so we disambiguate
-  (define acyclic-singletons
-    (for/list ([component (in-list components)]
-               #:when (= (length component) 1)
-               #:unless (has-self-cycle? component))
+  (define-values (acyclic-singletons recursive-aliases)
+    (for/fold ([singletons '()] [other '()])
+              ([component (in-list components)])
+      (if (and (= (length component) 1)
+               (not (has-self-cycle? component)))
+          (values (cons (car component) singletons) other)
+          (values singletons (append component other)))))
+
+  ;; Check that no #:implements clauses are recursive
+  (define counterexample
+    (for/or ([component class-components])
+      (and (or (not (= (length component) 1))
+               (has-self-cycle? component type-alias-class-map))
+           component)))
+  (when counterexample
+    (tc-error/stx
+     (car counterexample)
+     "Recursive #:implements clause not allowed"))
+
+  ;; Split recursive aliases into those involving classes
+  ;; (in reverse topological order) and the rest of the aliases
+  (define class-aliases
+    (for/list ([component (in-list (reverse class-components))]
+               #:when (member (car component)
+                              recursive-aliases
+                              free-identifier=?))
       (car component)))
+  (define other-recursive-aliases
+    (for/list ([alias (in-list recursive-aliases)]
+               #:unless (member alias
+                                class-aliases
+                                free-identifier=?))
+      alias))
+
+  ;; Actually register recursive type aliases
+  (for ([id (in-list recursive-aliases)])
+    (define record (dict-ref type-alias-map id))
+    (match-define (list rec-name _ args) record)
+    (define deps (dict-ref type-alias-dependency-map id))
+    (register-resolved-type-alias id (make-Name rec-name id deps args #f)))
 
   ;; Register non-recursive type aliases
   ;;
   ;; Note that the connected component algorithm returns results
   ;; in topologically sorted order, so we want to go through in the
   ;; reverse order of that to avoid unbound type aliases.
-  (for ([id (in-list (reverse acyclic-singletons))])
+  (for ([id (in-list acyclic-singletons)])
     (define type-stx (cadr (dict-ref type-alias-map id)))
     (register-resolved-type-alias id (parse-type type-stx)))
 
-  ;; Actually register recursive type aliases
-  (for ([(id record) (in-dict type-alias-map)]
-        #:unless (member id acyclic-singletons))
-    (match-define (list rec-name _ args) record)
-    (define deps (dict-ref type-alias-dependency-map id))
-    (register-resolved-type-alias id (make-Name rec-name id deps args #f)))
-
+  ;; Finish registering recursive aliases
   (define-values (names-to-refine types-to-refine tvarss)
     (for/lists (_1 _2 _3)
-               ([(id record) (in-dict type-alias-map)]
-                #:unless (member id acyclic-singletons))
+               ([id (in-list (append other-recursive-aliases class-aliases))])
+      (define record (dict-ref type-alias-map id))
       (match-define (list rec-name type-stx args) record)
       (define type
         ;; make sure to reject the type if it uses polymorphic
