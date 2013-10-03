@@ -679,9 +679,6 @@
                          [augments given-augments])
                   ([parent-type parent-types]
                    [parent-stx  parent-stxs])
-                ;; FIXME: this should check to avoid cycles in the
-                ;;        #:implements clauses because those are not
-                ;;        well-founded in any sense
                 (merge-with-parent-type row-var parent-type parent-stx
                                         fields methods augments)))
 
