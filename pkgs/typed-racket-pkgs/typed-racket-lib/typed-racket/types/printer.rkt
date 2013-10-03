@@ -283,7 +283,7 @@
      (fp "~a" (syntax->datum (Rep-stx a)))]
     [(Univ:) (fp "Any")]
     ;; names are just printed as the original syntax
-    [(Name: _ orig-id _ _ _) (fp "~a" (syntax-e orig-id))]
+    [(Name: id _ _ _) (fp "~a" (syntax-e id))]
     ;; If a type has a name, then print it with that name.
     ;; However, we expand the alias in some cases
     ;; (i.e., the fuel is > 0) for the :type form.

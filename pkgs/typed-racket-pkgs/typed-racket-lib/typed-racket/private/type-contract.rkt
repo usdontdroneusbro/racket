@@ -372,17 +372,17 @@
         ;; Applications of a potentially polymorphically
         ;; recursive type constructor turns into a contract
         ;; function application.
-        [(App: (and rator (Name: _ _ _ _ #f)) rands _)
+        [(App: (and rator (Name: _ _ _ #f)) rands _)
          #`(#,(t->c rator) #,@(map t->c rands))]
         ;; A recursive name depends on other type aliases,
         ;; possibly in mutual recursion. The contract will recur
         ;; on all dependencies as a conservative approximation.
-        [(Name: _ orig-id deps args #f)
+        [(Name: id deps args #f)
          ;; Name -> Syntax
          ;; Construct a contract function that corresponds to
          ;; a type operator
          (define (make-recname-ctc ty)
-           (match-define (Name: _ _ _ args #f) ty)
+           (match-define (Name: _ _ args #f) ty)
            (define kind (contract-kind->keyword (current-contract-kind)))
            (cond [args
                   (match-define (Poly: vs b) (resolve-once ty))
@@ -394,7 +394,7 @@
                  [else #`(recursive-contract
                           #,(t->c/both (resolve-once ty))
                           #,kind)]))
-         (define n (syntax-e orig-id))
+         (define n (syntax-e id))
          (cond [;; When this is a recursive reference, just use
                 ;; the identifier stored in the environment.
                 (assoc n (vars)) => second]
@@ -423,7 +423,7 @@
                              [dep dep-ctc]
                              ...)
                       n*))])]
-        [(or (App: _ _ _) (Name: _ _ _ _ #t))
+        [(or (App: _ _ _) (Name: _ _ _ #t))
          (t->c (resolve-once ty))]
         ;; any/c doesn't provide protection in positive position
         [(Univ:)
@@ -709,8 +709,8 @@
       (#:Type free-type?)
       type
       [#:Name
-       id orig-id deps arg struct?
-       (cond [(eq? (syntax-e orig-id) name)
+       id deps arg struct?
+       (cond [(eq? (syntax-e id) name)
               (escape #t)]
              [else ;; dummy
               (make-Value #f)])]))

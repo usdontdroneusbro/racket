@@ -521,14 +521,12 @@ This file defines two sorts of primitives. All of them are provided into any mod
             "type name used out of context"
             stx
             (and (stx-pair? stx) (stx-car stx)))))
-     (define/with-syntax rec-tname (generate-temporary #'tname))
      #`(begin
          #,(if (not (attribute omit))
-               (ignore #'(begin (define-syntax tname stx-err-fun)
-                                (define-syntax rec-tname stx-err-fun)))
+               (ignore #'(define-syntax tname stx-err-fun))
                #'(begin))
          #,(internal (syntax/loc stx
-                       (define-type-alias-internal tname rec-tname rest
+                       (define-type-alias-internal tname rest
                          rest.args))))]
     [(_ (tname:id args:id ...) rest)
      (syntax/loc stx (define-type-alias tname (All (args ...) rest)))]))

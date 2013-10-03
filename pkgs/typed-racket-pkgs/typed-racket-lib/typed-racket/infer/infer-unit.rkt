@@ -469,7 +469,7 @@
              (cset-meet proc-c (cgen/flds V X Y flds flds*)))]
 
           ;; two struct names, need to resolve b/c one could be a parent
-          [((Name: n _ _ _ #t) (Name: n* _ _ _ #t))
+          [((Name: n _ _ #t) (Name: n* _ _ #t))
            (if (free-identifier=? n n*)
                null
                (let ((rn (resolve-once S)) (rn* (resolve-once T)))

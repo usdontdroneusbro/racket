@@ -99,8 +99,8 @@
 (define (check-type-alias-contractive id type)
   (define/match (check type)
     [((Union: elems)) (andmap check elems)]
-    [((Name: _ orig-id _ _ _))
-     (and (not (free-identifier=? orig-id id))
+    [((Name: name-id _ _ _))
+     (and (not (free-identifier=? name-id id))
           (check (resolve-once type)))]
     [((App: rator rands stx))
      (and (check rator) (check rands))]
@@ -119,16 +119,16 @@
 ;; the information needed to register them later
 (define (get-type-alias-info type-aliases)
   (for/lists (_1 _2) ([type-alias (in-list type-aliases)])
-    (define-values (id name-id type-stx args) (parse-type-alias type-alias))
+    (define-values (id type-stx args) (parse-type-alias type-alias))
     ;; Register type alias names with a dummy value so that it's in
     ;; scope for the registration later.
     (register-resolved-type-alias id Err)
     (register-type-name
-     name-id
+     id
      (if args
          (make-Poly (map syntax-e args) Err)
          Err))
-    (values id (list id name-id type-stx args))))
+    (values id (list id type-stx args))))
 
 ;; register-all-type-aliases : Listof<Id> Dict<Id, TypeAliasInfo> -> Void
 ;;
@@ -157,7 +157,7 @@
         (parameterize ([current-type-alias-name name]
                        [current-referenced-aliases links-box]
                        [current-referenced-class-parents class-box])
-          (parse-type (cadr alias-info))))
+          (parse-type (car alias-info))))
       (define pre-dependencies
         (remove-duplicates (unbox links-box) free-identifier=?))
       (define alias-dependencies
@@ -223,9 +223,9 @@
   ;; Actually register recursive type aliases
   (for ([id (in-list recursive-aliases)])
     (define record (dict-ref type-alias-map id))
-    (match-define (list rec-name _ args) record)
+    (match-define (list _ args) record)
     (define deps (dict-ref type-alias-dependency-map id))
-    (register-resolved-type-alias id (make-Name rec-name id deps args #f)))
+    (register-resolved-type-alias id (make-Name id deps args #f)))
 
   ;; Register non-recursive type aliases
   ;;
@@ -233,7 +233,7 @@
   ;; in topologically sorted order, so we want to go through in the
   ;; reverse order of that to avoid unbound type aliases.
   (for ([id (in-list acyclic-singletons)])
-    (define type-stx (cadr (dict-ref type-alias-map id)))
+    (define type-stx (car (dict-ref type-alias-map id)))
     (register-resolved-type-alias id (parse-type type-stx)))
 
   ;; Finish registering recursive aliases
@@ -241,16 +241,16 @@
     (for/lists (_1 _2 _3)
                ([id (in-list (append other-recursive-aliases class-aliases))])
       (define record (dict-ref type-alias-map id))
-      (match-define (list rec-name type-stx args) record)
+      (match-define (list type-stx args) record)
       (define type
         ;; make sure to reject the type if it uses polymorphic
         ;; recursion (see resolve.rkt)
         (parameterize ([current-check-polymorphic-recursion args])
           (parse-type type-stx)))
-      (register-type-name rec-name type)
-      (add-constant-variance! rec-name args)
+      (register-type-name id type)
+      (add-constant-variance! id args)
       (check-type-alias-contractive id type)
-      (values rec-name type args)))
+      (values id type args)))
 
   ;; Finally, do a last pass to refine the variance
   (refine-variance! names-to-refine types-to-refine tvarss))
@@ -261,12 +261,12 @@
   (kernel-syntax-case* form #f
     (define-type-alias-internal values)
     [(define-values ()
-       (begin (quote-syntax (define-type-alias-internal nm rec-nm ty args))
+       (begin (quote-syntax (define-type-alias-internal nm ty args))
               (#%plain-app values)))
-     (values #'nm #'rec-nm #'ty (syntax-e #'args))]
+     (values #'nm #'ty (syntax-e #'args))]
     ;; this version is for `let`-like bodies
-    [(begin (quote-syntax (define-type-alias-internal nm rec-nm ty args))
+    [(begin (quote-syntax (define-type-alias-internal nm ty args))
             (#%plain-app values))
-     (values #'nm #'rec-nm #'ty (syntax-e #'args))]
+     (values #'nm #'ty (syntax-e #'args))]
     [_ (int-err "not define-type-alias")]))
 

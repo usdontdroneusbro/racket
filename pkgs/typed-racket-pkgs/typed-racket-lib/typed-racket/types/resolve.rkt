@@ -28,7 +28,7 @@
 
 (define (resolve-name t)
   (match t
-    [(Name: n _ _ _ _) (let ([t (lookup-type-name n)])
+    [(Name: n _ _ _) (let ([t (lookup-type-name n)])
                          (if (Type/c? t) t #f))]
     [_ (int-err "resolve-name: not a name ~a" t)]))
 
@@ -42,7 +42,7 @@
        (unless (= n (length rands))
          (tc-error "wrong number of arguments to polymorphic type: expected ~a and got ~a"
                    n (length rands)))]
-      [(Name: n _ _ _ #t)
+      [(Name: n _ _ #t)
        (when (and (current-poly-struct)
                   (free-identifier=? n (poly-name (current-poly-struct))))
         (define num-rands (length rands))
@@ -59,7 +59,7 @@
                           " does not match the given number:"
                           " expected " num-poly
                           ", given " num-rands))))]
-      [(Name: _ _ _ args #f)
+      [(Name: _ _ args #f)
        (cond [args
               (define num-rands (length rands))
               (define num-args (length args))
@@ -114,7 +114,7 @@
                  [already-resolving? #t])
     (resolve-app-check-error rator rands stx)
     (match rator
-      [(Name: _ _ _ _ _)
+      [(Name: _ _ _ _)
        (let ([r (resolve-name rator)])
          (and r (resolve-app r rands stx)))]
       [(Poly: _ _) (instantiate-poly rator rands)]
@@ -136,7 +136,7 @@
                   [(Mu: _ _) (unfold t)]
                   [(App: r r* s)
                    (resolve-app r r* s)]
-                  [(Name: _ _ _ _ _) (resolve-name t)])])
+                  [(Name: _ _ _ _) (resolve-name t)])])
         (when (and r* (not (currently-subtyping?)))
           (hash-set! resolver-cache seq r*))
         r*)))
