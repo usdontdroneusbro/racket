@@ -74,7 +74,7 @@
           (for/list ([elem (in-queue stack)]
                      #:final (equal? vtx elem))
             (dequeue! stack)
-            (set-vertex-stack?! vtx #f)
+            (set-vertex-stack?! elem #f)
             (vertex-id elem)))
         (set! sccs (cons new-scc sccs))))
 
