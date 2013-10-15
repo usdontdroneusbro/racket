@@ -192,7 +192,8 @@
    [(both) 'both]))
 
 (define (type->contract ty fail #:typed-side [typed-side #t] #:kind [kind 'impersonator])
-  (define vars (make-parameter '()))  
+  (define vars (make-parameter '()))
+  (define extra-cache-vars (make-parameter '()))
   (define current-contract-kind (make-parameter flat-sym))
   (define (increase-current-contract-kind! kind)
     (current-contract-kind (contract-kind-max (current-contract-kind) kind)))
@@ -344,7 +345,8 @@
                ;; see Poly
                (parameterize ([vars (append (for/list ([v (in-list vs)])
                                               (list v #'any/c))
-                                            (vars))])
+                                            (vars))]
+                              [extra-cache-vars '()])
                  (t->c/fun b #:method method?))]
               [else
                ;; extend row constraints and let Class contract
@@ -353,7 +355,8 @@
                (match-define (PolyRow-names: vs-nm constraints _) ty)
                (define/with-syntax seal/c (generate-temporary))
                (set-impersonator!)
-               (parameterize ([vars (cons (list (car vs) #'seal/c) (vars))])
+               (parameterize ([vars (cons (list (car vs) #'seal/c) (vars))]
+                              [extra-cache-vars '()])
                  #`(let ([seal/c (new-seal/c #,(car constraints)
                                              #,(cadr constraints)
                                              #,(caddr constraints))])
@@ -378,14 +381,15 @@
                 ;; the identifier stored in the environment.
                 (assoc n (vars)) => second]
                [else
-                ;; Helper function to construct additional contracts
-                ;; for the dependency types
-                (define (make-dep-contract type this-name new-vars)
+                ;; Helper function to construct the recursive contracts
+                ;; bound in the `letrec` below
+                (define (make-rec-contract type this-name new-vars use-env?)
                   (define new-vars*
                     ;; Ignore the current alias, since it needs to
                     ;; get turend into a real contract at least once
                     (dict-remove (append new-vars (vars)) this-name))
-                  (parameterize ([vars new-vars*])
+                  (parameterize ([vars (if use-env? new-vars new-vars*)]
+                                 [extra-cache-vars (list (list this-name))])
                     (define kind (contract-kind->keyword
                                   ;; FIXME: is this correct at all?
                                   (contract-kind-min kind impersonator-sym)))
@@ -402,16 +406,11 @@
                 ;; Construct contracts for each of the other type
                 ;; aliases that are depended on by the current type
                 ;; alias to establish the mutual recursion.
-                (define mapped-ty (resolve-once ty))
-                (define ctc
-                  (parameterize ([vars (append new-vars (vars))])
-                    (define kind (contract-kind->keyword
-                                  (contract-kind-min kind impersonator-sym)))
-                    #`(recursive-contract #,(t->c/both mapped-ty) #,kind)))
+                (define ctc (make-rec-contract (resolve-once ty) n new-vars #t))
                 (define dep-ctcs
                   (for/list ([dep deps])
                     (define dep-type (lookup-type-alias dep values))
-                    (make-dep-contract dep-type (syntax-e dep) new-vars)))
+                    (make-rec-contract dep-type (syntax-e dep) new-vars #f)))
                 (define/with-syntax (dep-ctc ...) dep-ctcs)
                 #`(letrec ([n* #,ctc]
                            [dep* dep-ctc]
@@ -538,7 +537,8 @@
          (define poly-ids (generate-temporaries vs))
          (define/with-syntax (all/c ...) poly-ids)
          #`(let ([all/c (new-∀/c (quote all/c))] ...)
-             #,(parameterize ([vars (append (map list vs poly-ids) (vars))])
+             #,(parameterize ([vars (append (map list vs poly-ids) (vars))]
+                              [extra-cache-vars '()])
                  (t->c resolved)))]
         [(Poly: vs b)
          ;; Don't generate poly contracts for non-functions
@@ -554,20 +554,23 @@
            (exit (fail #:reason "cannot generate contract for non-function polymorphic type")))
          (if (not (from-untyped? typed-side))
              ;; in typed positions, no checking needed for the variables
-             (parameterize ([vars (append (for/list ([v (in-list vs)]) (list v #'any/c)) (vars))])
+             (parameterize ([vars (append (for/list ([v (in-list vs)]) (list v #'any/c)) (vars))]
+                            [extra-cache-vars '()])
                (t->c b))
              ;; in untyped positions, use `parameteric/c'
              (match-let ([(Poly-names: vs-nm _) ty])
                (with-syntax ([(v ...) (generate-temporaries vs-nm)])
                  (set-impersonator!)
                  (parameterize ([vars (append (stx-map list vs #'(v ...))
-                                              (vars))])
+                                              (vars))]
+                                [extra-cache-vars '()])
                    #`(parametric->/c (v ...) #,(t->c b))))))]
         [(? PolyRow?) (t->c/poly-row ty)]
         [(Mu: n b)
          (match-let ([(Mu-name: n-nm _) ty])
            (with-syntax ([(n*) (generate-temporaries (list n-nm))])
              (parameterize ([vars (cons (list n #'n*) (vars))]
+                            [extra-cache-vars '()]
                             [current-contract-kind
                              (contract-kind-min kind chaperone-sym)])
                (define ctc (t->c/both b))
@@ -688,7 +691,7 @@
                           (define var (car var-pair))
                           (not (or (member var (fv ty))
                                    (has-name-free? var ty))))
-                        (vars)))
+                        (append (vars) (extra-cache-vars))))
            (define id (generate-temporary))
            (dict-set! cache (Type-seq ty) (list id ctc))
            (define types-box (current-contract-types))
