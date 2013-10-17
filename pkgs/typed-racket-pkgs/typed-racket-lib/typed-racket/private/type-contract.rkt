@@ -373,14 +373,11 @@
          ;; FIXME: remove or refactor
          (let ([cache-item (dict-ref cache (Type-seq ty) #f)])
            (and cache-item
-                (and (andmap (λ (var-pair)
-                           (define var (car var-pair))
-                           (not (member var (fv ty))
-                                ))
-                         (append (vars) (extra-cache-vars)))
-                     (not (has-names-free?
-                           (map car (append (vars) (extra-cache-vars)))
-                           ty)))
+                (andmap (λ (var-pair)
+                          (define var (car var-pair))
+                          (not (or (member var (fv ty))
+                                   (has-name-free? var ty))))
+                        (append (vars) (extra-cache-vars)))
                 cache-item))) => car]
    [else
     (define ctc
@@ -700,13 +697,11 @@
          (exit (fail #:reason "contract generation not supported for this type"))]))
     (cond [(and cache
                 ;; FIXME: factor this out into a helper function
-                (and (andmap (λ (var-pair)
-                               (define var (car var-pair))
-                               (not (member var (fv ty))))
-                             (append (vars) (extra-cache-vars)))
-                     (not (has-names-free?
-                           (map car (append (vars) (extra-cache-vars)))
-                           ty))))
+                (andmap (λ (var-pair)
+                          (define var (car var-pair))
+                          (not (or (member var (fv ty))
+                                   (has-name-free? var ty))))
+                        (append (vars) (extra-cache-vars))))
            (define id (generate-temporary))
            (dict-set! cache (Type-seq ty) (list id ctc))
            (define types-box (current-contract-types))
