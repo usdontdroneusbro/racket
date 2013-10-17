@@ -10,12 +10,23 @@
 
 (provide has-name-free?)
 
+(define name-free-cache (make-hash))
+
 ;; has-name-free? : Symbol Type -> Boolean
 ;;
 ;; Check if a type has a Name type free in it. This helps
 ;; determine if a contract should be cached for the type or
 ;; not.
 (define (has-name-free? name type)
+  (define key (cons name (Type-seq type)))
+  (cond [(hash-has-key? name-free-cache key)
+         (hash-ref name-free-cache key)]
+        [else
+         (define result (has-name-free?/core name type))
+         (hash-set! name-free-cache key result)
+         result]))
+
+(define (has-name-free?/core name type)
   (define seen-set (make-free-id-table))
   (let/ec escape
     (define (free-type? type)
