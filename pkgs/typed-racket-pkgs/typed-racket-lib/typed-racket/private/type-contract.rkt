@@ -10,7 +10,7 @@
  syntax/parse
  (rep type-rep filter-rep object-rep rep-utils)
  (utils tc-utils)
- (env type-alias-env type-name-env)
+ (env type-alias-env type-name-env name-utils)
  (types resolve utils)
  (prefix-in t: (types abbrev numeric-tower))
  (private parse-type syntax-properties)
@@ -708,30 +708,4 @@
            (set-box! types-box (cons (Type-seq ty) (unbox types-box)))
            id]
           [else ctc])]))))
-
-;; Check if a type has a Name type free in it. This helps
-;; determine if a contract should be cached for the type or
-;; not.
-;;
-;; FIXME: this is ridiculously slow, do something about it
-(define (has-name-free? name type)
-  (define seen-set (make-free-id-table))
-  (let/ec escape
-    (define (free-type? type)
-     (type-case
-      (#:Type free-type?)
-      type
-      [#:Name
-       id deps arg struct?
-       (cond [(free-id-table-ref seen-set id #f)
-              (make-Value #f)]
-             [(or (eq? (syntax-e id) name)
-                  (ormap (λ (id) (eq? (syntax-e id) name)) deps))
-              (escape #t)]
-             [else
-              (free-id-table-set! seen-set id #t)
-              (free-type? (resolve-once type))
-              (make-Value #f)])]))
-    (free-type? type)
-    #f))
 
