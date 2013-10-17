@@ -6,7 +6,6 @@
 (require "../utils/utils.rkt"
          (rep type-rep rep-utils)
          (types resolve)
-         racket/control
          syntax/id-table)
 
 (provide has-name-free?)
@@ -19,34 +18,32 @@
 ;; determine if a contract should be cached for the type or
 ;; not.
 (define (has-name-free? name type)
+  (define key (cons name (Type-seq type)))
+  (cond [(hash-has-key? name-free-cache key)
+         (hash-ref name-free-cache key)]
+        [else
+         (define result (has-name-free?/core name type))
+         (hash-set! name-free-cache key result)
+         result]))
+
+(define (has-name-free?/core name type)
   (define seen-set (make-free-id-table))
-  (define (free-type? type)
-    (define key (cons name (Type-seq type)))
-    (define has-key? (hash-has-key? name-free-cache key))
-    (%
-     (cond [(and has-key? (hash-ref name-free-cache key))
-            ;; whenever we have a #t answer, jump away
-            (fcontrol #t)]
-           [else
-            (type-case
-             (#:Type free-type?)
-             type
-             [#:Name
-              id deps arg struct?
-              (cond [(free-id-table-ref seen-set id #f)]
-                    [(or (eq? (syntax-e id) name)
-                         (ormap (λ (id) (eq? (syntax-e id) name)) deps))
-                     (fcontrol #t)]
-                    [else
-                     (free-id-table-set! seen-set id #t)
-                     (free-type? (resolve-once type))])])
-            (hash-set! name-free-cache key #f)
-            ;; return dummy type for `type-case`
-            (make-Value #f)])
-     (λ (answer _)
-       (unless has-key?
-         (hash-set! name-free-cache key answer))
-       (fcontrol answer))))
-  (% (begin (free-type? type) #f)
-     (λ (v _) v)))
+  (let/ec escape
+    (define (free-type? type)
+     (type-case
+      (#:Type free-type?)
+      type
+      [#:Name
+       id deps arg struct?
+       (cond [(free-id-table-ref seen-set id #f)
+              (make-Value #f)]
+             [(or (eq? (syntax-e id) name)
+                  (ormap (λ (id) (eq? (syntax-e id) name)) deps))
+              (escape #t)]
+             [else
+              (free-id-table-set! seen-set id #t)
+              (free-type? (resolve-once type))
+              (make-Value #f)])]))
+    (free-type? type)
+    #f))
 
