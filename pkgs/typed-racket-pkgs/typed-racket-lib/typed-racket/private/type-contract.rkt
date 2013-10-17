@@ -18,6 +18,7 @@
  racket/format
  unstable/list
  racket/dict racket/set
+ syntax/id-table
  (only-in racket/set set-intersect set-subtract)
  unstable/sequence
  (contract-req)
@@ -368,7 +369,16 @@
 
       (define cache (current-contract-cache))
   (cond
-   [(and cache (dict-ref cache (Type-seq ty) #f)) => car]
+   [(and cache
+         ;; FIXME: remove or refactor
+         (let ([cache-item (dict-ref cache (Type-seq ty) #f)])
+           (and cache-item
+                (andmap (λ (var-pair)
+                          (define var (car var-pair))
+                          (not (or (member var (fv ty))
+                                   (has-name-free? var ty))))
+                        (append (vars) (extra-cache-vars)))
+                cache-item))) => car]
    [else
     (define ctc
       (match ty
@@ -388,7 +398,7 @@
                     ;; Ignore the current alias, since it needs to
                     ;; get turend into a real contract at least once
                     (dict-remove (append new-vars (vars)) this-name))
-                  (parameterize ([vars (if use-env? new-vars new-vars*)]
+                  (parameterize ([vars (if use-env? (append new-vars (vars)) new-vars*)]
                                  [extra-cache-vars (list (list this-name))])
                     (define kind (contract-kind->keyword
                                   ;; FIXME: is this correct at all?
@@ -705,7 +715,7 @@
 ;;
 ;; FIXME: this is ridiculously slow, do something about it
 (define (has-name-free? name type)
-  (define seen-set (mutable-set))
+  (define seen-set (make-free-id-table))
   (let/ec escape
     (define (free-type? type)
      (type-case
@@ -713,13 +723,14 @@
       type
       [#:Name
        id deps arg struct?
-       (cond [(set-member? seen-set name)
+       (cond [(free-id-table-ref seen-set id #f)
               (make-Value #f)]
              [(or (eq? (syntax-e id) name)
                   (ormap (λ (id) (eq? (syntax-e id) name)) deps))
               (escape #t)]
-             [else ;; dummy
-              (set-add! seen-set name)
+             [else
+              (free-id-table-set! seen-set id #t)
+              (free-type? (resolve-once type))
               (make-Value #f)])]))
     (free-type? type)
     #f))
