@@ -653,6 +653,7 @@
     [(kw (~var clause (class-type-clauses parse-type)))
      (add-disappeared-use #'kw)
      (define parent-stxs (stx->list #'clause.extends-types))
+     (define parent-types (map parse-type parent-stxs))
      (define given-inits (attribute clause.inits))
      (define given-fields (attribute clause.fields))
      (define given-methods (attribute clause.methods))
@@ -666,9 +667,6 @@
      ;; (otherwise the merging process will error)
      (cond [(or (null? parent-stxs)
                 (not (current-referenced-aliases)))
-            ;; Don't parse this until we're done with type aliases
-            ;; to avoid including #:implements clauses as dependencies
-            (define parent-types (map parse-type parent-stxs))
 
             (check-function-types given-methods)
             (check-function-types given-augments)

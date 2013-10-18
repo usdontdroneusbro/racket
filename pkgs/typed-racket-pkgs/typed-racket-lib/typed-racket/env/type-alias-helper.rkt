@@ -235,7 +235,7 @@
                        (get-all-parent-deps parent))))
            (apply append all-deps)]))
 
-  (define new-dependency-map
+  (define new-dependency-map/classes
     (for/list ([(id deps) (in-dict type-alias-dependency-map)])
       (cond [(dict-has-key? type-alias-class-map id)
              (define new-deps
@@ -243,6 +243,20 @@
                                   free-identifier=?))
              (cons id new-deps)]
             [else (cons id deps)])))
+
+  ;; Do another pass on dependency map, using the connected
+  ;; components analysis data to determine which dependencies are
+  ;; actually needed for mutual recursion. Drop all others.
+  (define new-dependency-map
+    (for/list ([(id deps) (in-dict new-dependency-map/classes)])
+      ;; find the component this `id` participated in so
+      ;; that we can drop `deps` that aren't in that component
+      (define component
+        (findf (λ (component) (member id component free-identifier=?))
+               components))
+      (define new-deps
+        (filter (λ (dep) (member dep component free-identifier=?)) deps))
+      (cons id new-deps)))
 
   ;; Actually register recursive type aliases
   (for ([id (in-list recursive-aliases)])
