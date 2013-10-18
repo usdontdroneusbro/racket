@@ -35,15 +35,15 @@
       type
       [#:Name
        id deps arg struct?
-       (cond [(free-id-table-ref seen-set id #f)
-              (make-Value #f)]
+       (cond [struct? type]
+             [(free-id-table-ref seen-set id #f) type]
              [(or (eq? (syntax-e id) name)
                   (ormap (λ (id) (eq? (syntax-e id) name)) deps))
               (escape #t)]
              [else
               (free-id-table-set! seen-set id #t)
               (free-type? (resolve-once type))
-              (make-Value #f)])]))
+              type])]))
     (free-type? type)
     #f))
 
