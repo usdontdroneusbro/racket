@@ -3,7 +3,10 @@
 ;; Contract generation for Typed Racket
 
 (provide type->contract define/fixup-contract? change-contract-fixups
-         type->contract-fail)
+         type->contract-fail
+         ;; FIXME: instead of exposing these, it would be better to
+         ;;        provide an abstraction for this instead
+         current-contract-cache current-contract-types)
 
 (require
  "../utils/utils.rkt"

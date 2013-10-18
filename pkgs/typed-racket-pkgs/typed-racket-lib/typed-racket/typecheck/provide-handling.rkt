@@ -3,7 +3,11 @@
 (require "../utils/utils.rkt"
          unstable/list unstable/sequence syntax/id-table racket/dict racket/syntax
          racket/struct-info racket/match syntax/parse syntax/location
-         (only-in (private type-contract) type->contract)
+         racket/list
+         (only-in (private type-contract)
+                  type->contract
+                  current-contract-cache
+                  current-contract-types)
          (typecheck renamer def-binding)
          (utils tc-utils)
          (for-syntax racket/base)
@@ -132,7 +136,21 @@
 
   ;; mk-value-triple : identifier? identifier? (or/c syntax? #f) -> triple/c
   (define (mk-value-triple internal-id new-id ty)
-    (define contract (type->contract ty (λ (#:reason [reason #f]) #f)))
+    (define-values (contract sub-contracts)
+      ;; FIXME: this repeats code from type-contract.rkt, so abstract
+      ;;        it out when the contract caching code is more stable
+      (parameterize ([current-contract-cache (make-hasheq)]
+                     [current-contract-types (box '())])
+        (define contract (type->contract ty (λ (#:reason [reason #f]) #f)))
+        (define cache (current-contract-cache))
+        (define type-box (current-contract-types))
+        (define types (remove-duplicates (reverse (unbox type-box))))
+        (define defs
+          (for/list ([type (in-list types)])
+            (define name+ctc (dict-ref cache type))
+            (match-define (list name ctc) name+ctc)
+            #`(define #,name #,ctc)))
+        (values contract defs)))
 
     (with-syntax* ([id internal-id]
                    [untyped-id (freshen-id #'id)]
@@ -142,6 +160,7 @@
             (with-syntax* ([module-source pos-blame-id]
                            [the-contract (generate-temporary 'generated-contract)])
               #`(begin
+                  #,@sub-contracts
                   (define the-contract #,contract)
                   (define-syntax untyped-id
                     (make-provide/contract-transformer
