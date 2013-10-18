@@ -122,12 +122,15 @@
     (define-values (id type-stx args) (parse-type-alias type-alias))
     ;; Register type alias names with a dummy value so that it's in
     ;; scope for the registration later.
+    ;;
+    ;; The `(make-Value (gensym))` expression is used to make sure
+    ;; that unions don't collapse the aliases too soon.
     (register-resolved-type-alias id Err)
     (register-type-name
      id
      (if args
-         (make-Poly (map syntax-e args) Err)
-         Err))
+         (make-Poly (map syntax-e args) (make-Value (gensym)))
+         (make-Value (gensym))))
     (values id (list id type-stx args))))
 
 ;; register-all-type-aliases : Listof<Id> Dict<Id, TypeAliasInfo> -> Void
