@@ -6,7 +6,7 @@
 (require racket/require racket/match unstable/sequence racket/string racket/promise
          (prefix-in s: srfi/1)
          (path-up "rep/type-rep.rkt" "rep/filter-rep.rkt" "rep/object-rep.rkt"
-                  "rep/rep-utils.rkt" "types/subtype.rkt"
+                  "rep/rep-utils.rkt" "types/subtype.rkt" "types/resolve.rkt"
                   "utils/utils.rkt"
                   "utils/tc-utils.rkt"
                   "env/type-name-env.rkt")
@@ -282,8 +282,8 @@
     [(? Rep-stx a)
      (fp "~a" (syntax->datum (Rep-stx a)))]
     [(Univ:) (fp "Any")]
-    ;; names are just printed as the original syntax
-    [(Name: id _ _ _) (fp "~a" (syntax-e id))]
+    ;; struct names are just printed as the original syntax
+    [(Name: id _ _ #t) (fp "~a" (syntax-e id))]
     ;; If a type has a name, then print it with that name.
     ;; However, we expand the alias in some cases
     ;; (i.e., the fuel is > 0) for the :type form.
@@ -296,7 +296,8 @@
               ;; if we still have fuel, print the expanded type and
               ;; add the name to the ignored list so that the union
               ;; printer does not try to print with the name.
-              (print-type type port write? (append names ignored-names)))]
+              (print-type (if (Name? type) (resolve type) type)
+                          port write? (append names ignored-names)))]
            [else
             ;; to allow :type to cue the user on unexpanded aliases
             (set-box! (current-print-unexpanded)
