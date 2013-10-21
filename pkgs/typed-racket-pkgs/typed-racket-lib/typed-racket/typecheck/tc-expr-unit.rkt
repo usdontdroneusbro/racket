@@ -373,7 +373,7 @@
       #:literals (#%app lambda find-method/who)
       [stx
        #:when (syntax-property form 'tr:class)
-       (ret (check-class form #f))]
+       (check-class form #f)]
       [stx
        #:when (with-handlers-property form)
        (let ([ty (check-subforms/with-handlers form)])

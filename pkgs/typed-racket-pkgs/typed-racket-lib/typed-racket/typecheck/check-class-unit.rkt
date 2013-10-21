@@ -456,10 +456,11 @@
   (define class-type-parameters (hash-ref parse-info 'type-parameters))
   (do-timestamp "done")
   (if (null? class-type-parameters)
-      final-class-type
-      (make-Poly #:original-names class-type-parameters
-                 (hash-ref parse-info 'fresh-parameters)
-                 final-class-type)))
+      (ret final-class-type -true-filter)
+      (ret (make-Poly #:original-names class-type-parameters
+                      (hash-ref parse-info 'fresh-parameters)
+                      final-class-type)
+           -true-filter)))
 
 ;; check-method-presence-and-absence : Dict Type Set<Symbol> ... -> Void
 ;; use the internal class: information to check whether clauses
