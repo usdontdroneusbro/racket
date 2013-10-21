@@ -611,15 +611,18 @@
          (t->c t)]
         [(Instance: (or (? Mu? t) (? Name? t)))
          #`(instanceof/c #,(t->c t))]
-        [(Instance: (Class: _ _ _
+        [(Instance: (Class: _ _
+                            (list (list field-names field-types) ...)
                             (list (list name fcn) ...)
                             _))
          (set-impersonator!)
          (with-syntax ([(fcn-cnts ...) (for/list ([f (in-list fcn)])
                                          (t->c/method f))]
+                       [(field-name ...) field-names]
+                       [(field-ctc ...) (map t->c field-types)]
                        [(names ...) name])
-           ;; FIXME: fields
-           #'(object/c (names fcn-cnts) ...))]
+           #'(object/c (names fcn-cnts) ...
+                       (field [field-name field-ctc] ...)))]
         [(Class: row-var
                  (list (list by-name-inits by-name-init-ty _) ...)
                  (list (list field-names field-types) ...)
