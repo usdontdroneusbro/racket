@@ -619,7 +619,6 @@
                        [(names ...) name])
            ;; FIXME: fields
            #'(object/c (names fcn-cnts) ...))]
-        ;; init args not currently handled by class/c
         [(Class: row-var
                  (list (list by-name-init by-name-init-ty _) ...)
                  fields ; FIXME: generate contracts for these
