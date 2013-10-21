@@ -112,7 +112,7 @@
     (define type-aliases
       (for/fold ([aliases '()]) ([expr exprs])
         (kernel-syntax-case* expr #f (values define-type-alias-internal)
-          [(begin (quote-syntax (define-type-alias-internal _ _ _ _)) (#%plain-app values))
+          [(begin (quote-syntax (define-type-alias-internal _ _ _)) (#%plain-app values))
            (cons expr aliases)]
           [_ aliases])))
     (define-values (alias-names alias-map) (get-type-alias-info type-aliases))
