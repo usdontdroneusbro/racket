@@ -611,18 +611,16 @@
          (t->c t)]
         [(Instance: (or (? Mu? t) (? Name? t)))
          #`(instanceof/c #,(t->c t))]
-        [(Instance: (Class: _ _
-                            (list (list field-names field-types) ...)
-                            (list (list name fcn) ...)
-                            _))
+        [(Instance: (Class: _ _ fields methods _))
          (set-impersonator!)
-         (with-syntax ([(fcn-cnts ...) (for/list ([f (in-list fcn)])
-                                         (t->c/method f))]
-                       [(field-name ...) field-names]
-                       [(field-ctc ...) (map t->c field-types)]
-                       [(names ...) name])
-           #'(object/c (names fcn-cnts) ...
-                       (field [field-name field-ctc] ...)))]
+         (match-define (list (list field-names field-types) ...) fields)
+         (match-define (list (list public-names public-types) ...) methods)
+         (define/with-syntax (field-name ...) field-names)
+         (define/with-syntax (field-ctc ...) (map t->c field-types))
+         (define/with-syntax (public-name ...) public-names)
+         (define/with-syntax (public-ctc ...) (map t->c/method public-types))
+         #'(object/c (public-name public-ctc) ...
+                     (field [field-name field-ctc] ...))]
         [(Class: row-var
                  (list (list by-name-inits by-name-init-ty _) ...)
                  (list (list field-names field-types) ...)
