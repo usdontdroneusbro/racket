@@ -385,6 +385,11 @@
    [else
     (define ctc
       (match ty
+        ;; Applications of polymorphic recursive type aliases
+        ;; turn into contract function applications to prevent
+        ;; infinite resolution of the application.
+        [(App: (and rator (Name: _ _ _ #f)) rands _)
+         #`(#,(t->c rator) #,@(map t->c rands))]
         ;; A recursive name depends on other type aliases,
         ;; possibly in mutual recursion. The contract will recur
         ;; on all dependencies as a conservative approximation.
@@ -406,7 +411,16 @@
                     (define kind (contract-kind->keyword
                                   ;; FIXME: is this correct at all?
                                   (contract-kind-min kind impersonator-sym)))
-                    #`(recursive-contract #,(t->c/both type) #,kind)))
+                    (cond [(Poly? type)
+                           (match-define (Poly: vs b) type)
+                           (define args (generate-temporaries vs))
+                           (parameterize ([vars (append (for/list ([var vs] [arg args])
+                                                          (list var arg))
+                                                        (vars))])
+                             #`(λ (#,@args) (recursive-contract #,(t->c/both b) #,kind)))]
+                          [(and (Name? type) (Name-args type))
+                           (t->c/both type)]
+                          [else #`(recursive-contract #,(t->c/both type) #,kind)])))
                 ;; Remove self-reference here so that it doesn't overwrite
                 ;; the n->n* mapping in the `parameterize` below, which
                 ;; can break the generated contract
