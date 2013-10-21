@@ -188,14 +188,18 @@
 ;;  we know by this point that #'form is an actual typed
 ;;  class produced by `class` due to the syntax property
 (define (check-class form [expected #f])
-  (match (and expected (resolve expected))
-    [(tc-result1: (and self-class-type (Class: _ _ _ _ _)))
-     (parse-and-check form self-class-type)]
-    [(tc-result1: (Poly-names: ns body-type))
-     ;; FIXME: this case probably isn't quite right
-     (check-class form (ret body-type))]
-    [#f (parse-and-check form #f)]
-    [_ (check-below (parse-and-check form #f) expected)]))
+  (define (check-class/type form type)
+    (match type
+      [(and self-class-type (Class: _ _ _ _ _))
+       (parse-and-check form self-class-type)]
+      [(Poly-names: ns body-type)
+       ;; FIXME: is this right?
+       (check-class/type form body-type)]
+      [_ (check-below (parse-and-check form #f) type)]))
+  (match expected
+    [(tc-result1: type)
+     (check-class/type form (resolve type))]
+    [#f (parse-and-check form #f)]))
 
 ;; Syntax Option<Type> -> Type
 ;; Parse the syntax and extract useful information to pass to the
