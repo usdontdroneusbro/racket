@@ -32,6 +32,7 @@
                         object-contract class/c object/c class?
                         instanceof/c new-seal/c
                         init override inherit super augment
+                        field inherit-field
                         augride inner)))
 
 ;; These check if either the define form or the body form has the syntax
@@ -621,7 +622,7 @@
            #'(object/c (names fcn-cnts) ...))]
         [(Class: row-var
                  (list (list by-name-inits by-name-init-ty _) ...)
-                 fields ; FIXME: generate contracts for these
+                 (list (list field-names field-types) ...)
                  (list (list name fcn) ...)
                  (list (list augment-names aug-fcn) ...))
          (set-impersonator!)
@@ -651,6 +652,10 @@
          (define/with-syntax (pub-name ...) public-names)
          (define/with-syntax (pub-gen ...) public-gens)
          (define/with-syntax (pub-ctc ...) public-ctcs)
+         (define/with-syntax (field-name ...) field-names)
+         (define/with-syntax (field-gen ...)
+           (generate-temporaries field-names))
+         (define/with-syntax (field-ctc ...) (map t->c field-types))
          (define/with-syntax (augment-name ...) augment-names)
          (define/with-syntax (pubment-name ...) pubment-names)
          (define/with-syntax (override-name ...) override-names)
@@ -659,12 +664,15 @@
              (t->c/neg t)))
          (define/with-syntax (by-name-init ...) by-name-inits)
          (define class/c-stx
-           #'(let ([pub-gen pub-ctc] ...)
+           #'(let ([pub-gen pub-ctc] ...
+                   [field-gen field-ctc] ...)
                (class/c
                 (init [by-name-init by-name-cnt] ...)
                 (pub-name pub-gen) ...
                 (inherit [pub-name pub-gen] ...)
                 (super [override-name override-ctc] ...)
+                (field [field-name field-gen] ...)
+                (inherit-field [field-name field-gen] ...)
                 (inner [augment-name augment-ctc] ...)
                 (override [override-name override-ctc] ...)
                 (augment [pubment-name pubment-ctc] ...))))
