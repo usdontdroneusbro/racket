@@ -639,8 +639,7 @@
              (values (car k+v) (car (cdr k+v)) (cadr (cdr k+v)))))
          (define pubment-names (set-intersect name aug-name))
          (define override-names (set-subtract name pubment-names))
-         (with-syntax ([(fcn-cnt ...) public-ctcs]
-                       [(aug-fcn-cnt ...)
+         (with-syntax ([(aug-fcn-cnt ...)
                         (for/list ([f (in-list aug-fcn)])
                           (t->c/method f))]
                        [(pubment-fcn-cnt ...)
@@ -649,7 +648,9 @@
                        [(override-fcn-cnt ...)
                         (for/list ([name (in-list override-names)])
                           (car (hash-ref method-contract-map name)))]
-                       [(name ...) public-names]
+                       [(pub-name ...) public-names]
+                       [(pub-gen ...) public-gens]
+                       [(pub-ctc ...) public-ctcs]
                        [(aug-name ...) aug-name]
                        [(pubment-name ...) pubment-names]
                        [(override-name ...) override-names]
@@ -657,13 +658,11 @@
                                             (t->c/neg t))]
                        [(by-name-init ...) by-name-init])
            (define class/c-stx
-             #`(let #,(for/list ([ctc-name (in-list public-gens)]
-                                 [ctc (in-list public-ctcs)])
-                        #`[#,ctc-name #,ctc])
+             #'(let ([pub-gen pub-ctc] ...)
                  (class/c
                   (init [by-name-init by-name-cnt] ...)
-                  (name fcn-cnt) ...
-                  (inherit [name fcn-cnt]) ...
+                  (pub-name pub-gen) ...
+                  (inherit [pub-name pub-gen]) ...
                   (super [override-name override-fcn-cnt]) ...
                   (inner [aug-name aug-fcn-cnt]) ...
                   (override [override-name override-fcn-cnt]) ...
