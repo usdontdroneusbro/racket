@@ -620,10 +620,10 @@
            ;; FIXME: fields
            #'(object/c (names fcn-cnts) ...))]
         [(Class: row-var
-                 (list (list by-name-init by-name-init-ty _) ...)
+                 (list (list by-name-inits by-name-init-ty _) ...)
                  fields ; FIXME: generate contracts for these
                  (list (list name fcn) ...)
-                 (list (list aug-name aug-fcn) ...))
+                 (list (list augment-names aug-fcn) ...))
          (set-impersonator!)
          ;; Only apply a sealing contract if the type actually has
          ;; a row variable. In that case, look up the contract from
@@ -637,39 +637,40 @@
          (define-values (public-names public-gens public-ctcs)
            (for/lists (_1 _2 _3) ([k+v (in-hash-pairs method-contract-map)])
              (values (car k+v) (car (cdr k+v)) (cadr (cdr k+v)))))
-         (define pubment-names (set-intersect name aug-name))
+         (define pubment-names (set-intersect name augment-names))
          (define override-names (set-subtract name pubment-names))
-         (with-syntax ([(aug-fcn-cnt ...)
-                        (for/list ([f (in-list aug-fcn)])
-                          (t->c/method f))]
-                       [(pubment-fcn-cnt ...)
-                        (for/list ([name (in-list pubment-names)])
-                          (car (hash-ref method-contract-map name)))]
-                       [(override-fcn-cnt ...)
-                        (for/list ([name (in-list override-names)])
-                          (car (hash-ref method-contract-map name)))]
-                       [(pub-name ...) public-names]
-                       [(pub-gen ...) public-gens]
-                       [(pub-ctc ...) public-ctcs]
-                       [(aug-name ...) aug-name]
-                       [(pubment-name ...) pubment-names]
-                       [(override-name ...) override-names]
-                       [(by-name-cnt ...) (for/list ([t (in-list by-name-init-ty)])
-                                            (t->c/neg t))]
-                       [(by-name-init ...) by-name-init])
-           (define class/c-stx
-             #'(let ([pub-gen pub-ctc] ...)
-                 (class/c
-                  (init [by-name-init by-name-cnt] ...)
-                  (pub-name pub-gen) ...
-                  (inherit [pub-name pub-gen]) ...
-                  (super [override-name override-fcn-cnt]) ...
-                  (inner [aug-name aug-fcn-cnt]) ...
-                  (override [override-name override-fcn-cnt]) ...
-                  (augment [pubment-name pubment-fcn-cnt]) ...)))
-           (if seal/c
-               #`(and/c #,seal/c #,class/c-stx)
-               class/c-stx))]
+         (define/with-syntax (augment-ctc ...)
+           (for/list ([f (in-list aug-fcn)])
+             (t->c/method f)))
+         (define/with-syntax (pubment-ctc ...)
+          (for/list ([name (in-list pubment-names)])
+            (car (hash-ref method-contract-map name))))
+         (define/with-syntax (override-ctc ...)
+          (for/list ([name (in-list override-names)])
+            (car (hash-ref method-contract-map name))))
+         (define/with-syntax (pub-name ...) public-names)
+         (define/with-syntax (pub-gen ...) public-gens)
+         (define/with-syntax (pub-ctc ...) public-ctcs)
+         (define/with-syntax (augment-name ...) augment-names)
+         (define/with-syntax (pubment-name ...) pubment-names)
+         (define/with-syntax (override-name ...) override-names)
+         (define/with-syntax (by-name-cnt ...)
+           (for/list ([t (in-list by-name-init-ty)])
+             (t->c/neg t)))
+         (define/with-syntax (by-name-init ...) by-name-inits)
+         (define class/c-stx
+           #'(let ([pub-gen pub-ctc] ...)
+               (class/c
+                (init [by-name-init by-name-cnt] ...)
+                (pub-name pub-gen) ...
+                (inherit [pub-name pub-gen]) ...
+                (super [override-name override-ctc]) ...
+                (inner [augment-name augment-ctc]) ...
+                (override [override-name override-ctc]) ...
+                (augment [pubment-name pubment-ctc]) ...)))
+         (if seal/c
+             #`(and/c #,seal/c #,class/c-stx)
+             class/c-stx)]
         [(Value: '()) #'null?]
         [(Struct: nm par (list (fld: flds acc-ids mut?) ...) proc poly? pred?)
          (cond
