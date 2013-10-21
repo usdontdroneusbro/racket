@@ -663,11 +663,11 @@
                (class/c
                 (init [by-name-init by-name-cnt] ...)
                 (pub-name pub-gen) ...
-                (inherit [pub-name pub-gen]) ...
-                (super [override-name override-ctc]) ...
-                (inner [augment-name augment-ctc]) ...
-                (override [override-name override-ctc]) ...
-                (augment [pubment-name pubment-ctc]) ...)))
+                (inherit [pub-name pub-gen] ...)
+                (super [override-name override-ctc] ...)
+                (inner [augment-name augment-ctc] ...)
+                (override [override-name override-ctc] ...)
+                (augment [pubment-name pubment-ctc] ...))))
          (if seal/c
              #`(and/c #,seal/c #,class/c-stx)
              class/c-stx)]
