@@ -1165,7 +1165,25 @@
    (check-err #:exn #rx"Cannot apply expression of type Any"
      (class object% (super-new)
             (define/pubment (foo x) 0)
-            (define/public (g x) (foo 3))))))
+            (define/public (g x) (foo 3))))
+
+   ;; check that resolve is called appropriately for
+   ;; uses of `get-field`
+   (check-ok
+    (define-type Foo% (Class (init-field [f (Instance Bar%)])))
+    (define-type Bar% (Class (field [f Integer]) [m (Foo% -> Void)]))
+    (: foo% Foo%)
+    (define foo%
+      (class object%
+        (super-new)
+        (init-field f)))
+    (: bar% Bar%)
+    (define bar%
+      (class object%
+        (super-new)
+        (field [f 0])
+        (define/public (m x) (void))))
+    (get-field f (get-field f (new foo% [f (new bar%)]))))))
 
 (define-go class-tests)
 

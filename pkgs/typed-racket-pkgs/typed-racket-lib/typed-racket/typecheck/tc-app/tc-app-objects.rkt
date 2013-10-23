@@ -77,16 +77,21 @@
   (unless maybe-meth-sym
     (tc-error/expr #:return (ret (Un))
                    "expected a symbolic method name, but got ~a" meth))
-  (match (resolve obj-type)
-    ;; FIXME: handle unions and mu?
-    [(and ty (Instance: (Class: _ _ (list fields ...) _ _)))
-     (cond [(assq maybe-meth-sym fields) =>
-            (λ (field-entry) (ret (cadr field-entry)))]
-           [else
-            (tc-error/expr #:return (ret (Un))
-                           "expected an object with field ~a, but got ~a"
-                           maybe-meth-sym ty)])]
-    [t
-     (tc-error/expr #:return (ret (Un))
-                    "expected an object value for get-field, got ~a" t)]))
+  (define (check obj-type)
+    (match (resolve obj-type)
+      ;; FIXME: handle unions
+      [(and ty (Instance: (Class: _ _ (list fields ...) _ _)))
+       (cond [(assq maybe-meth-sym fields) =>
+              (λ (field-entry) (ret (cadr field-entry)))]
+             [else
+              (tc-error/expr #:return (ret (Un))
+                             "expected an object with field ~a, but got ~a"
+                             maybe-meth-sym ty)])]
+      [(Instance: type)
+       (check (make-Instance (resolve type)))]
+      [type
+       (tc-error/expr #:return (ret (Un))
+                      "expected an object value for get-field, got ~a"
+                      type)]))
+  (check obj-type))
 
