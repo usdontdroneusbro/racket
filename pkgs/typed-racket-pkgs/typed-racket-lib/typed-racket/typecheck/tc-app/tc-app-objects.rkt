@@ -73,20 +73,20 @@
 (define (check-get-field meth obj)
   (define maybe-meth-sym
     (syntax-parse meth [(quote m:id) (syntax-e #'m)] [_ #f]))
-  (define obj-type (tc-expr obj))
+  (define obj-type (tc-expr/t obj))
   (unless maybe-meth-sym
     (tc-error/expr #:return (ret (Un))
                    "expected a symbolic method name, but got ~a" meth))
-  (match obj-type
+  (match (resolve obj-type)
     ;; FIXME: handle unions and mu?
-    [(tc-result1: (and ty (Instance: (Class: _ _ (list fields ...) _ _))))
+    [(and ty (Instance: (Class: _ _ (list fields ...) _ _)))
      (cond [(assq maybe-meth-sym fields) =>
             (λ (field-entry) (ret (cadr field-entry)))]
            [else
             (tc-error/expr #:return (ret (Un))
                            "expected an object with field ~a, but got ~a"
                            maybe-meth-sym ty)])]
-    [(tc-result1: t)
+    [t
      (tc-error/expr #:return (ret (Un))
                     "expected an object value for get-field, got ~a" t)]))
 
