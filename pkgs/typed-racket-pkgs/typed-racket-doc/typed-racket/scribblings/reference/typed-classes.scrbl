@@ -17,10 +17,11 @@ Typed Racket provides support for object-oriented programming with
 the classes and objects provided by the @racketmodname[racket/class]
 library.
 
-@defform[#:literals (init field augment)
+@defform[#:literals (init init-field field augment)
          (Class class-type-clause ...)
          #:grammar ([class-type-clause name+type
                                        (init init-type ...)
+                                       (init-field init-type ...)
                                        (field name+type ...)
                                        (augment name+type ...)
                                        (code:line #:implements type-alias-id)
