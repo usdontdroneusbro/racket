@@ -5,8 +5,9 @@
          "utils.rkt"
          syntax/parse syntax/stx racket/match unstable/sequence unstable/syntax
          racket/dict
+         racket/format
          (typecheck signatures)
-         (types resolve union utils)
+         (types base-abbrev resolve subtype union utils)
          (rep type-rep)
          (utils tc-utils)
 
@@ -32,6 +33,12 @@
      (check-get-field #'field #'obj))
   (pattern (gf . args)
      #:declare gf (id-from 'get-field/proc 'racket/private/class-internal)
+     (int-err "unexpected arguments to get-field/proc"))
+  (pattern (sf field obj val)
+     #:declare sf (id-from 'set-field!/proc 'racket/private/class-internal)
+     (check-set-field #'field #'obj #'val))
+  (pattern (sf . args)
+     #:declare sf (id-from 'set-field!/proc 'racket/private/class-internal)
      (int-err "unexpected arguments to get-field/proc")))
 
 ;; check-do-make-object : Syntax Syntax Listof<Syntax> Listof<Syntax> -> TCResult
@@ -92,6 +99,40 @@
       [type
        (tc-error/expr #:return (ret (Un))
                       "expected an object value for get-field, got ~a"
+                      type)]))
+  (check obj-type))
+
+;; check-set-field : Syntax Syntax Syntax -> TCResult
+;; type-check the `set-field!` operation on objects
+(define (check-set-field field obj val)
+  (define maybe-field-sym
+    (syntax-parse field [(quote f:id) (syntax-e #'f)] [_ #f]))
+  (unless maybe-field-sym
+    (tc-error/expr #:return (ret (Un))
+                   "expected a symbolic field name, but got ~a" field))
+  (define obj-type (tc-expr/t obj))
+  (define val-type (tc-expr/t val))
+  (define (check obj-type)
+    (match (resolve obj-type)
+      ;; FIXME: handle unions
+      [(and ty (Instance: (Class: _ _ (list fields ...) _ _)))
+       (cond [(assq maybe-field-sym fields) =>
+              (λ (field-entry)
+                (define field-type (cadr field-entry))
+                (unless (subtype val-type field-type)
+                  (tc-error/expr (~a "field mutation only allowed with compatible types"
+                                     ":\n" val-type " is not a subtype of "
+                                     field-type)))
+                (ret -Void))]
+             [else
+              (tc-error/expr #:return (ret (Un))
+                             "expected an object with field ~a, but got ~a"
+                             maybe-field-sym ty)])]
+      [(Instance: type)
+       (check (make-Instance (resolve type)))]
+      [type
+       (tc-error/expr #:return (ret (Un))
+                      "expected an object value for set-field!, got ~a"
                       type)]))
   (check obj-type))
 

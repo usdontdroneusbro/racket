@@ -1183,7 +1183,23 @@
         (super-new)
         (field [f 0])
         (define/public (m x) (void))))
-    (get-field f (get-field f (new foo% [f (new bar%)]))))))
+    (get-field f (get-field f (new foo% [f (new bar%)]))))
+
+   ;; check use of set-field!
+   (check-ok
+    (set-field! x
+                (new (class object%
+                       (super-new)
+                       (field [x : String "foo"])))
+                "bar"))
+
+   ;; fails, check set-field! type error
+   (check-err #:exn #rx"field mutation only allowed with"
+    (set-field! x
+                (new (class object%
+                       (super-new)
+                       (field [x : String "foo"])))
+                2))))
 
 (define-go class-tests)
 
