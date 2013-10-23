@@ -113,6 +113,7 @@
 [ThreadCellTop -ThreadCellTop]
 [Prompt-TagTop -Prompt-TagTop]
 [Continuation-Mark-KeyTop -Continuation-Mark-KeyTop]
+[ClassTop (make-ClassTop)]
 [Keyword -Keyword]
 [Thread -Thread]
 [Resolved-Module-Path -Resolved-Module-Path]

@@ -411,6 +411,7 @@
     [(Syntax: t) (fp "(Syntaxof ~a)" t)]
     [(Instance: (and (? has-name?) t)) (fp "(Instance ~a)" t)]
     [(Instance: (? Class? ty)) (print-class-type ty fp #:object? #t)]
+    [(ClassTop:) (fp "ClassTop")]
     [(? Class? ty) (print-class-type ty fp)]
     [(Result: t (FilterSet: (Top:) (Top:)) (Empty:)) (fp "~a" t)]
     [(Result: t fs (Empty:)) (fp "(~a : ~a)" t fs)]
