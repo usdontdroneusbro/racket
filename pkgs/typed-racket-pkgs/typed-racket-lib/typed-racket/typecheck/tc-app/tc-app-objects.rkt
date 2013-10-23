@@ -27,9 +27,9 @@
   (pattern (dmo . args)
      #:declare dmo (id-from 'do-make-object 'racket/private/class-internal)
      (int-err "unexpected arguments to do-make-object"))
-  (pattern (gf meth obj)
+  (pattern (gf field obj)
      #:declare gf (id-from 'get-field/proc 'racket/private/class-internal)
-     (check-get-field #'meth #'obj))
+     (check-get-field #'field #'obj))
   (pattern (gf . args)
      #:declare gf (id-from 'get-field/proc 'racket/private/class-internal)
      (int-err "unexpected arguments to get-field/proc")))
@@ -70,23 +70,23 @@
 
 ;; check-get-field : Syntax Syntax -> TCResult
 ;; type-check the `get-field` operation on objects
-(define (check-get-field meth obj)
-  (define maybe-meth-sym
-    (syntax-parse meth [(quote m:id) (syntax-e #'m)] [_ #f]))
-  (define obj-type (tc-expr/t obj))
-  (unless maybe-meth-sym
+(define (check-get-field field obj)
+  (define maybe-field-sym
+    (syntax-parse field [(quote f:id) (syntax-e #'f)] [_ #f]))
+  (unless maybe-field-sym
     (tc-error/expr #:return (ret (Un))
-                   "expected a symbolic method name, but got ~a" meth))
+                   "expected a symbolic field name, but got ~a" field))
+  (define obj-type (tc-expr/t obj))
   (define (check obj-type)
     (match (resolve obj-type)
       ;; FIXME: handle unions
       [(and ty (Instance: (Class: _ _ (list fields ...) _ _)))
-       (cond [(assq maybe-meth-sym fields) =>
+       (cond [(assq maybe-field-sym fields) =>
               (λ (field-entry) (ret (cadr field-entry)))]
              [else
               (tc-error/expr #:return (ret (Un))
                              "expected an object with field ~a, but got ~a"
-                             maybe-meth-sym ty)])]
+                             maybe-field-sym ty)])]
       [(Instance: type)
        (check (make-Instance (resolve type)))]
       [type
