@@ -17,6 +17,13 @@
             'pos
             'neg))
 
+(test/spec-passed
+ 'object/c-first-order-object-3
+ '(contract (make-object/c null null null null)
+            (new object%)
+            'pos
+            'neg))
+
 (test/pos-blame
  'object/c-first-order-method-1
  '(contract (object/c [m (-> any/c number? number?)])
@@ -27,6 +34,13 @@
 (test/spec-passed
  'object/c-first-order-method-2
  '(contract (object/c [m (-> any/c number? number?)])
+            (new (class object% (super-new) (define/public (m x) (add1 x))))
+            'pos
+            'neg))
+
+(test/spec-passed
+ 'object/c-first-order-method-3
+ '(contract (make-object/c '(m) (list (-> any/c number? number?)) null null)
             (new (class object% (super-new) (define/public (m x) (add1 x))))
             'pos
             'neg))
@@ -59,6 +73,13 @@
 (test/spec-passed
  'object/c-first-order-field-2
  '(contract (object/c (field [n number?]))
+            (new (class object% (super-new) (field [n 3])))
+            'pos
+            'neg))
+
+(test/spec-passed
+ 'object/c-first-order-field-3
+ '(contract (make-object/c null null '(n) (list number?))
             (new (class object% (super-new) (field [n 3])))
             'pos
             'neg))
@@ -154,6 +175,16 @@
  'object/c-higher-order-field-8
  '(let* ([pre-o (new (class object% (super-new) (field [n 3])))]
          [o (contract (object/c (field [n number?]))
+                      pre-o
+                      'pos
+                      'neg)])
+    (set-field! n pre-o #t)
+    (get-field n o)))
+
+(test/pos-blame
+ 'object/c-higher-order-field-9
+ '(let* ([pre-o (new (class object% (super-new) (field [n 3])))]
+         [o (contract (make-object/c null null '(n) (list number?))
                       pre-o
                       'pos
                       'neg)])
