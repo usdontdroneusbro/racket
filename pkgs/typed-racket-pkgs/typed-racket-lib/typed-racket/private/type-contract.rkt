@@ -25,11 +25,12 @@
  (only-in racket/set set-intersect set-subtract)
  unstable/sequence
  (contract-req)
- (for-template racket/base racket/contract racket/set (utils any-wrap)
+ (for-template racket/base racket/contract racket/set
+               (utils any-wrap object-guard)
                (prefix-in t: (types numeric-predicates))
                (only-in unstable/contract sequence/c)
                (only-in racket/class object% is-a?/c subclass?/c
-                        object-contract class/c object/c class?
+                        object-contract class/c class?
                         instanceof/c new-seal/c
                         init override inherit super augment
                         field inherit-field
@@ -619,8 +620,8 @@
          (define/with-syntax (field-ctc ...) (map t->c field-types))
          (define/with-syntax (public-name ...) public-names)
          (define/with-syntax (public-ctc ...) (map t->c/method public-types))
-         #'(object/c (public-name public-ctc) ...
-                     (field [field-name field-ctc] ...))]
+         #'(object/c-strict (public-name public-ctc) ...
+                            (field [field-name field-ctc] ...))]
         [(Class: row-var
                  (list (list by-name-inits by-name-init-ty _) ...)
                  (list (list field-names field-types) ...)
