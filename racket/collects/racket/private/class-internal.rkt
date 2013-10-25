@@ -64,6 +64,7 @@
            (struct-out exn:fail:object)
            make-primitive-class
            class/c ->m ->*m ->dm case->m object/c instanceof/c
+           make-object/c
            new-seal/c
            
            ;; "keywords":
@@ -3649,6 +3650,31 @@ An example
           #:key (compose symbol->string car)))
   (values (map car sorted) (map cdr sorted)))
 
+;; make-object/c : Listof<Symbol> Listof<Contract>
+;;                 Listof<Symbol> Listof<Contract>
+;;                 -> Contract
+;; An external constructor provided in order to allow runtime
+;; construction of object contracts by libraries that want to
+;; implement their own object contract variants
+(define (make-object/c method-names method-contracts
+                       field-names field-contracts)
+  (define (ensure-symbols names)
+    (unless (and (list? names) (andmap symbol? names))
+      (raise-argument-error 'make-object/c "(listof symbol?)" names)))
+  (define (ensure-length names ctcs)
+    (unless (= (length names) (length ctcs))
+      (raise-arguments-error 'make-object/c
+                             "expected the same number of names and contracts"
+                             "names" names
+                             "contracts" ctcs)))
+  (ensure-symbols method-names)
+  (ensure-length method-names method-contracts)
+  (ensure-symbols field-names)
+  (ensure-length field-names field-contracts)
+  (make-base-object/c
+   method-names (coerce-contracts 'make-object/c method-contracts)
+   field-names (coerce-contracts 'make-object/c field-contracts)))
+
 (define (check-object-contract obj methods fields fail)
   (unless (object? obj)
     (fail '(expected: "an object" given: "~e") obj))
@@ -5702,4 +5728,5 @@ An example
          (struct-out wrapped-class) (struct-out wrapped-class-info) (struct-out wrapped-object)
          blame-add-method-context blame-add-init-context
          class/c ->m ->*m ->dm case->m object/c instanceof/c
+         make-object/c
          new-seal/c)
