@@ -74,7 +74,8 @@ library.
 @defform[#:literals (field)
          (Object object-type-clause ...)
          #:grammar ([object-type-clause name+type
-                                        (field name+type ...)])]{
+                                        (field name+type ...)]
+                    [name+type [id type]])]{
   The type of an object with the given field and method types.
 
   @ex[
