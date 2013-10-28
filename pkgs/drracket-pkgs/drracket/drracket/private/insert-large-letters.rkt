@@ -1,8 +1,7 @@
 #lang typed/racket
 
-(require typed/mred/mred
-         typed/framework/framework
-         racket/class
+(require typed/racket/gui
+         typed/framework
          string-constants)
 
 (define-type Bitmap-Message%
@@ -12,9 +11,17 @@
 (require/typed "bitmap-message.rkt"
                [bitmap-message% Bitmap-Message%])
 
+(require/typed "insert-large-letters-helper.rkt"
+               [make-color:mut
+                (case->
+                 (Byte Byte Byte -> (Instance Color%))
+                 (Byte Byte Byte Real -> (Instance Color%)))]
+               [make-bitmap:mono
+                (Positive-Integer Positive-Integer -> (Instance Bitmap%))])
+
 (provide insert-large-letters)
 
-(: insert-large-letters (String Char (Instance Text:Basic%) Any -> Void))
+(: insert-large-letters (String Char (Instance Text:Basic<%>) (Instance Frame%) -> Void))
 (define (insert-large-letters comment-prefix comment-character edit parent)
   (let ([str (make-large-letters-dialog comment-prefix comment-character #f)])
     (when (and str
@@ -24,17 +31,21 @@
 
 (: get-default-font (-> (Instance Font%)))
 (define (get-default-font)
-  (send (send (editor:get-standard-style-list)
-              find-named-style
-              "Standard")
+  (send (assert (send (editor:get-standard-style-list)
+                      find-named-style
+                      "Standard"))
         get-font))
 
 (: get-chosen-font (-> (Instance Font%)))
 (define (get-chosen-font)
   (let ([pref-val (preferences:get 'drracket:large-letters-font)])
     (cond
-      [pref-val
-       (let ([candidate (send the-font-list find-or-create-font (cdr pref-val) (car pref-val) 'default 'normal 'normal)])
+      [(and pref-val (pair? pref-val))
+       (let: ([candidate : (Instance Font%)
+               (send the-font-list find-or-create-font
+                     (assert (cdr pref-val) exact-integer?)
+                     (assert (car pref-val) string?)
+                     'default 'normal 'normal)])
          (if (equal? (send candidate get-face) (car pref-val))
              candidate
              (get-default-font)))]
@@ -44,7 +55,7 @@
 (define columns-string "~a columns")
 
 ;; make-large-letters-dialog : string char top-level-window<%> -> void
-(: make-large-letters-dialog (String Char Any -> (Option String)))
+(: make-large-letters-dialog (String Char (Option (Instance Frame%)) -> (Option String)))
 (define (make-large-letters-dialog comment-prefix comment-character parent)
   (define dlg (new dialog% 
                    [parent parent] 
@@ -74,7 +85,7 @@
                     (preferences:set 'drracket:large-letters-font
                                      (cons (list-ref (get-face-list)
                                                      choice)
-                                           (if old
+                                           (if (and old (pair? old))
                                                (cdr old)
                                                (send (get-default-font) get-point-size))))
                     (update-txt (send (assert text-field defined?) get-value)))))])))
@@ -88,7 +99,7 @@
   (: pane2 (Instance Horizontal-Pane%))
   (define pane2 (new horizontal-pane% (parent info-bar)))
                                 
-  (: txt (Instance Text:Basic%))
+  (: txt (Instance Text:Basic<%>))
   (define txt (new racket:text%))
   (: ec (Instance Editor-Canvas%))
   (define ec (new editor-canvas% [parent dlg] [editor txt]))
@@ -143,7 +154,7 @@
       (format " (~a)" (floor (inexact->exact w))))))
   
 
-(: get-max-line-width ((Instance Text:Basic%) -> Real))
+(: get-max-line-width ((Instance Text:Basic<%>) -> Real))
 (define (get-max-line-width txt)
   (let loop ([i (+ (send txt last-paragraph) 1)]
              [#{m : Integer} 0])
@@ -154,13 +165,13 @@
                             (send txt paragraph-start-position (- i 1)))))])))
       
 
-(: render-large-letters (String Char (Instance Font%) String (Instance Text:Basic%) -> (Instance Bitmap%)))
+(: render-large-letters (String Char (Instance Font%) String (Instance Text:Basic<%>) -> (Instance Bitmap%)))
 (define (render-large-letters comment-prefix comment-character the-font str edit)
-  (define bdc (new bitmap-dc% [bitmap (make-bitmap 1 1 #t)]))
+  (define bdc (new bitmap-dc% [bitmap (make-bitmap:mono 1 1)]))
   (define-values (tw raw-th td ta) (send bdc get-text-extent str the-font))
   (define th (let-values ([(_1 h _2 _3) (send bdc get-text-extent "X" the-font)])
                (max raw-th h)))
-  (define tmp-color (make-color 0 0 0))
+  (define tmp-color (make-color:mut 0 0 0))
   
   (: get-char (Real Real -> Char))
   (define (get-char x y)
@@ -170,10 +181,9 @@
           comment-character
           #\space)))  
   (define bitmap
-    (make-bitmap
-      (max 1 (assert (exact-floor tw) positive?))
-      (assert (exact-floor th) positive?)
-      #t))
+    (make-bitmap:mono
+      (assert (max 1 (exact-floor tw)) positive?)
+      (assert (exact-floor th) positive?)))
   
   (: fetch-line (Real -> String))
   (define (fetch-line y)
