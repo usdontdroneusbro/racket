@@ -42,10 +42,15 @@ library.
   be provided at object instantiation.
 
   When @racket[type-alias-id] is provided, the resulting class type
-  includes all of the initialization argument, method, and field types
-  from the specified type alias (which must be an alias for a class type).
+  includes all of the method, augmentable method, and field types from
+  the specified type alias (which must be an alias for a class type).
   Multiple @racket[#:implements] clauses may be provided for a single class
   type.
+
+  Note that the @racket[#:implements] clause @emph{does not} include
+  the initialization argument types from the specified type aliases,
+  because a subclass does not necessarily define the same initialization
+  arguments (because they can be initialized via @racket[super-new]).
 
   @ex[
     (define-type Point<%> (Class (field [x Real] [y Real])))
