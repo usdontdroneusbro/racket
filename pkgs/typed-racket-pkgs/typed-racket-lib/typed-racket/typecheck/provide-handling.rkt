@@ -139,15 +139,15 @@
     (define-values (contract sub-contracts)
       ;; FIXME: this repeats code from type-contract.rkt, so abstract
       ;;        it out when the contract caching code is more stable
-      (parameterize ([current-contract-cache (make-hasheq)]
+      (parameterize ([current-contract-cache (make-hash)]
                      [current-contract-types (box '())])
         (define contract (type->contract ty (λ (#:reason [reason #f]) #f)))
         (define cache (current-contract-cache))
         (define type-box (current-contract-types))
         (define types (remove-duplicates (reverse (unbox type-box))))
         (define defs
-          (for/list ([type (in-list types)])
-            (define name+ctc (dict-ref cache type))
+          (for/list ([type+side (in-list types)])
+            (define name+ctc (dict-ref cache type+side))
             (match-define (list name ctc) name+ctc)
             #`(define #,name #,ctc)))
         (values contract defs)))

@@ -122,7 +122,7 @@
 ;; those here and leave everything else as is.
 (define (change-contract-fixups forms)
   (define seen-types (mutable-set))
-  (parameterize ([current-contract-cache (make-hasheq)]
+  (parameterize ([current-contract-cache (make-hash)]
                  [current-contract-types (box '())])
     (let loop ([results '()] [exprs (syntax->list forms)])
       (cond [(empty? exprs) (reverse results)]
@@ -136,9 +136,9 @@
              (define type-box (current-contract-types))
              (define types (reverse (remove-duplicates (reverse (unbox type-box)))))
              (define defs
-               (for/list ([type (in-list types)]
-                          #:unless (set-member? seen-types type))
-                 (define name+ctc (dict-ref cache type))
+               (for/list ([type+side (in-list types)]
+                          #:unless (set-member? seen-types type+side))
+                 (define name+ctc (dict-ref cache type+side))
                  (match-define (list name ctc) name+ctc)
                  #`(define #,name #,ctc)))
              ;; reset before the next loop so that each expr only
@@ -376,7 +376,7 @@
   (cond
    [(and cache
          ;; FIXME: remove or refactor
-         (let ([cache-item (dict-ref cache (Type-seq ty) #f)])
+         (let ([cache-item (dict-ref cache (cons (Type-seq ty) typed-side) #f)])
            (and cache-item
                 (andmap (λ (var-pair)
                           (define var (car var-pair))
@@ -729,9 +729,10 @@
                                    (has-name-free? var ty))))
                         (append (vars) (extra-cache-vars))))
            (define id (generate-temporary))
-           (dict-set! cache (Type-seq ty) (list id ctc))
+           (dict-set! cache (cons (Type-seq ty) typed-side) (list id ctc))
            (define types-box (current-contract-types))
-           (set-box! types-box (cons (Type-seq ty) (unbox types-box)))
+           (set-box! types-box
+                     (cons (cons (Type-seq ty) typed-side) (unbox types-box)))
            id]
           [else ctc])]))))
 
