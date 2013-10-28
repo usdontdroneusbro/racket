@@ -631,7 +631,7 @@
       (define/pubment (capability-value s) 
         (inner (get-capability-default s) capability-value s))
       
-      (define/public (first-opened) (void))
+      (define/public (first-opened s) (void))
       (define/public (get-comment-character) (values ";  " #\;))
       
       (inherit get-language-position)

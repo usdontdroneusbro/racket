@@ -2048,7 +2048,7 @@
       (class* % (not-a-language-language<%>)
         (define/override (get-style-delta) (drracket:rep:get-error-delta))
         
-        (define/override (first-opened) 
+        (define/override (first-opened s)
           (not-a-language-message)
           (eprintf "\n"))
         

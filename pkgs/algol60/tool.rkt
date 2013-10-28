@@ -58,7 +58,7 @@
           (define/public (get-metadata-lines) #f)
           
           (define/public (capability-value s) (drscheme:language:get-capability-default s))
-          (define/public (first-opened) (void))
+          (define/public (first-opened s) (void))
           (define/public (config-panel parent)
             (case-lambda
               [() null]

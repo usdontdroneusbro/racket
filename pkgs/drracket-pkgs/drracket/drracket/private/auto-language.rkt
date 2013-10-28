@@ -1,29 +1,59 @@
-#lang typed/racket
+#lang typed/racket/no-check
 
-(require typed/framework/framework 
-	 typed/mred/mred
+(require ; typed/framework
+	 ; typed/racket/gui
+         framework
+         racket/gui
          racket/class)
 
 (provide pick-new-language looks-like-module?)
 
 (define-type (Language:Language% Settings)
-  (Class [get-reader-module (-> Sexp)]
-         [get-metadata-lines (-> Number)]
-         [metadata->settings (String -> Settings)]))
-
-(define-type (Language:Object Settings)
-  (Instance (Class)))
+  (Class [capability-value (Symbol -> Any)]
+         [config-panel
+          ((Instance Panel%) ->
+           (case-> (-> Settings) (Settings -> Void)))]
+         [create-executable
+          (Settings (U (Instance Dialog%) (Instance Frame%)) String -> Void)]
+         [default-settings (-> Settings)]
+         [default-settings? (Settings -> Boolean)]
+         [first-opened (Settings -> Void)]
+         [front-end/complete-program
+          (Input-Port Settings -> (-> (U Sexp Syntax EOF)))]
+         [front-end/finished-complete-program (Settings -> Any)]
+         [front-end/interaction
+          (Input-Port Settings -> (-> (U Sexp Syntax EOF)))]
+         [get-comment-character (-> (Values String Char))]
+         [get-language-name (-> String)]
+         [get-language-numbers (-> (Pairof Number (Listof Number)))]
+         [get-language-position (-> (Pairof String (Listof String)))]
+         [get-language-url (-> (Option String))]
+         [get-metadata (Symbol Settings -> String)]
+         [get-metadata-lines (-> Natural)]
+         [get-one-line-summary (-> String)]
+         [get-reader-module (-> (Option Sexp))]
+         [get-style-delta
+          (-> (U #f (Instance Style-Delta%)
+                 (Listof (List (Instance Style-Delta%) Number Number))))]
+         [extra-repl-information (Settings Output-Port -> Void)]
+         [marshall-settings (Settings -> Any)]
+         [metadata->settings (String -> Settings)]
+         [on-execute (Settings ((-> Any) -> Any) -> Any)]
+         [render-value (Any Settings Output-Port -> Void)]
+         [render-value/format
+          (Any Settings Output-Port (U 'infinity Number) -> Void)]
+         [unmarshall-settings (Any -> (Option Settings))]))
 
 (: pick-new-language (All (S)
-                          ((Instance Text%) 
+                          ((Instance Text:File<%>)
                            (Listof (Instance (Language:Language% S)))
-                           (U #f (Language:Object S)) (U #f S)
+                           (U #f (Instance (Language:Language% S))) (U #f S)
                            -> 
-                           (values (U #f (Language:Object S))
+                           (values (U #f (Instance (Language:Language% S)))
                                    (U #f S)))))
 (define (pick-new-language text all-languages module-language module-language-settings)
   (with-handlers ([exn:fail:read? (λ (x) (values #f #f))])
-    (let: ([found-language? : (U #f (Language:Object S)) #f]
+    (let: ([found-language? : (U #f (Instance (Language:Language% S))) #f]
            [settings : (U #f S) #f])
       
       (for-each
@@ -33,7 +63,10 @@
              (let* ([lines (send lang get-metadata-lines)]
                     [str (send text get-text
                                0
-                               (send text paragraph-end-position (- lines 1)))]
+                               (send text paragraph-end-position
+                                     ;; FIXME: this assumption is bogus and
+                                     ;;        so is the documented type
+                                     (assert (- lines 1) positive?)))]
                     [sp (open-input-string str)])
                (when (regexp-match #rx"#reader" sp)
                  (let ([spec-in-file (read sp)])
