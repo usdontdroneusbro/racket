@@ -6,7 +6,7 @@
 
 (define-type YellowMessage%
   (Class #:implements Canvas%
-         (init [parent (Instance Frame%)]
+         (init [parent (Instance Area-Container<%>)]
                [style (Listof (U 'border 'control-border 'combo
                                  'vscroll 'hscroll 'resize-corner
                                  'gl 'no-autoclear 'transparent
