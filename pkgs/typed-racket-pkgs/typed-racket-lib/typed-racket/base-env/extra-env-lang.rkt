@@ -5,24 +5,31 @@
 ;; (unlike the monolithic base type environment in base-env.rkt)
 
 (require "../utils/utils.rkt"
+         (for-syntax (private parse-type))
          (for-syntax racket/base syntax/parse)
-         (private parse-type))
+         (types abbrev numeric-tower union filter-ops)
+         (for-syntax (types abbrev numeric-tower union filter-ops)))
 
 (provide (rename-out [-#%module-begin #%module-begin])
          require
-         (except-out (all-from-out racket/base) #%module-begin))
+         (for-syntax parse-type) ; to allow resolution of Name types
+         (except-out (all-from-out racket/base) #%module-begin)
+         (for-syntax (except-out (all-from-out racket/base) #%module-begin))
+         types rep private utils
+         (for-syntax (types-out abbrev numeric-tower union filter-ops)))
 
 ;; Also see env-lang.rkt, where some of this code was stolen from
 (define-syntax (-#%module-begin stx)
   (define-syntax-class clause
     #:description "[id type]"
-    (pattern [id:identifier ty]))
+    (pattern [id:identifier ty]
+             #:with register #'(register-type (quote-syntax id) ty)))
   (syntax-parse stx #:literals (require provide begin)
     [(mb (~optional
           (~and extra (~or (begin . _)
                            (require . args)
                            (provide . args))))
-         ~! :clause ...)
+         ~! binding:clause ...)
      #'(#%plain-module-begin
         extra
         (require (for-syntax typed-racket/env/env-req))
@@ -32,14 +39,12 @@
             (require typed-racket/types/numeric-tower typed-racket/env/type-name-env
                      typed-racket/env/global-env typed-racket/env/type-alias-env
                      typed-racket/types/struct-table typed-racket/types/abbrev
-                     typed-racket/private/parse-type
                      (rename-in racket/private/sort [sort raw-sort]))
             ;; FIXME: add a switch to turn contracts on for testing
-            (register-type (quote-syntax id) (parse-type (quote-syntax ty)))
-            ...)))
+            binding.register ...)))
         (begin-for-syntax (add-mod! (variable-reference->module-path-index
                                      (#%variable-reference))))
-        (provide id ...))]
+        (provide binding.id ...))]
     [(mb . rest)
      #'(mb (begin) . rest)]))
 
