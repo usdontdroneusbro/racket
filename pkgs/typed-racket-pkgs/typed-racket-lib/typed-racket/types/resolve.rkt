@@ -11,10 +11,18 @@
 
 (provide resolve-name resolve-app needs-resolving?
          resolve resolve-app-check-error
+         current-cache-resolve?
          current-check-polymorphic-recursion)
 (provide/cond-contract [resolve-once (Type/c . -> . (or/c Type/c #f))])
 
 (define-struct poly (name vars) #:prefab)
+
+;; This parameter allows other parts of the typechecker to
+;; request that the resolve cache isn't updated. This is needed
+;; by the setup for recursive type aliases, since certain Name
+;; types should not be cached while their mapping is still being
+;; computed.
+(define current-cache-resolve? (make-parameter #f))
 
 ;; Parameter<Option<Listof<Symbol>>>
 ;; This parameter controls whether or not the resolving process
@@ -137,7 +145,9 @@
                   [(App: r r* s)
                    (resolve-app r r* s)]
                   [(Name: _ _ _ _) (resolve-name t)])])
-        (when (and r* (not (currently-subtyping?)))
+        (when (and r*
+                   (not (currently-subtyping?))
+                   (current-cache-resolve?))
           (hash-set! resolver-cache seq r*))
         r*)))
 

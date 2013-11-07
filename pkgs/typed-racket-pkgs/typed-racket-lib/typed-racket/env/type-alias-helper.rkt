@@ -140,6 +140,10 @@
 ;; other definitions need to be registered, do that before calling
 ;; this function.
 (define (register-all-type-aliases type-alias-names type-alias-map)
+  ;; Disable resolve caching for the extent of this setup.
+  ;; Makes sure Name types don't get cached too soon.
+  (current-cache-resolve? #f)
+
   ;; Find type alias dependencies
   ;; The two maps defined here contains the dependency structure
   ;; of type aliases in two senses:
@@ -294,7 +298,8 @@
       (values id type args)))
 
   ;; Finally, do a last pass to refine the variance
-  (refine-variance! names-to-refine types-to-refine tvarss))
+  (refine-variance! names-to-refine types-to-refine tvarss)
+  (current-cache-resolve? #t))
 
 ;; Syntax -> Syntax Syntax Syntax Option<Integer>
 ;; Parse a type alias internal declaration
