@@ -9,8 +9,13 @@
 (define (currently-subtyping?) (not (null? (current-seen))))
 (define (seen-before s t) (cons (Type-seq s) (Type-seq t)))
 
-(define (remember s t A) 
-  (if (or (Mu? s) (Mu? t)
+(define (remember s t A)
+  (if #t
+      ;; FIXME: this optimization does not work with recursive
+      ;;        implicit type aliases. see if there's a way to
+      ;;        make it work.
+      #;
+      (or (Mu? s) (Mu? t)
           (Name? s) (Name? t)
           (Struct? s) (Struct? t) 
           (App? s) (App? t))
