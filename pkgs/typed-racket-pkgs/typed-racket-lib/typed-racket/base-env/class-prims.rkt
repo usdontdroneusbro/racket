@@ -406,7 +406,8 @@
               ([content contents])
       (define stx (non-clause-stx content))
       (syntax-parse stx
-        #:literals (: define-values super-new)
+        #:literals (: define-values super-new super-make-object
+                    super-instantiate)
         ;; if it's a method definition for a declared method, then
         ;; mark it as something to type-check
         [(define-values (id) . rst)
@@ -447,7 +448,10 @@
                  (append rest-top (list plain-annotation))
                  private-fields)]
         ;; Identify super-new for the benefit of the type checker
-        [(super-new [init-id init-expr] ...)
+        [((~or (~literal super-new)
+               (~literal super-make-object)
+               (~literal super-instantiate))
+          arg ...)
          (define new-non-clause
            (non-clause (syntax-property stx 'tr:class:super-new #t)))
          (values methods (append rest-top (list new-non-clause))

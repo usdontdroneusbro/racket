@@ -326,6 +326,14 @@
     (: d% (Class))
     (define d% (class c% (super-new [x "bad"]))))
 
+   ;; fails, positional super construction not allowed
+   (check-err #:exn #rx"positional arguments for super"
+     (class object% (super-instantiate ((+ 1 2) 4)) (field [x : Integer 0])))
+
+   ;; fails, same reason as previous
+   (check-err #:exn #rx"positional arguments for super"
+     (class object% (super-make-object (+ 1 2) 4) (field [x : Integer 0])))
+
    ;; test override
    (check-ok
     (: c% (Class [m (Integer -> Integer)]))

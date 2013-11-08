@@ -980,21 +980,34 @@
         [else (car stxs)]))
 
 ;; find-provided-inits : Syntax Inits -> Dict<Symbol, Syntax>
-;; Find the init arguments that were provided via super-new
+;; Find the init arguments that were provided via super-new.
+;; Error if any positional arguments were provided.
 (define (find-provided-inits stx super-inits)
+  (define (pos-arg-error pos-args)
+    (tc-error/expr "positional arguments for super constructor not supported"
+                   #:stx pos-args))
   (syntax-parse stx
-    #:literals (#%plain-app list cons quote)
-    [(#%plain-app super-go _ _ _ _ _
+    #:literals (#%plain-app #%plain-lambda list cons quote)
+    [(#%plain-app super-go:id _ _ _ _
+                  pos-args
                   (#%plain-app
                    list
                    (#%plain-app cons (quote init-id) arg:expr)
                    ...))
+     (when (not (and (identifier? #'pos-args)
+                     (free-identifier=? #'pos-args #'null)))
+       (pos-arg-error #'pos-args))
      (define provided-inits (syntax->datum #'(init-id ...)))
      (for ([name provided-inits])
        (unless (dict-ref super-inits name #f)
          (tc-error/expr "super-new: init argument ~a not accepted by superclass"
                         name)))
-     (map cons provided-inits (syntax->list #'(arg ...)))]))
+     (map cons provided-inits (syntax->list #'(arg ...)))]
+    [(#%plain-app
+      (#%plain-lambda args:id _)
+      arg ...)
+     (pos-arg-error #'(arg ...))
+     null]))
 
 ;; check-super-new : Dict<Symbol, Syntax> Dict<Symbol, Type> -> Void
 ;; Check if the super-new call is well-typed
