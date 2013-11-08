@@ -25,7 +25,7 @@
 
 (: yellow-message% YellowMessage%)
 (define yellow-message%
-  (class: canvas%
+  (class canvas%
     (inherit get-dc refresh get-client-size
              min-width min-height
              get-parent)
@@ -68,7 +68,7 @@
     (super-new [stretchable-width #f] [stretchable-height #f])))
 
 (define tooltip-frame%
-  (class: frame%
+  (class frame%
     (inherit reflow-container move get-width get-height is-shown?)
     
     (: frame-to-track (Option (Instance Frame%)))

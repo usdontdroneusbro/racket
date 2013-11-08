@@ -27,7 +27,7 @@ This file defines two sorts of primitives. All of them are provided into any mod
                      -lambda -define)
          ;; provide the contracted bindings as primitives
          (all-from-out "base-contracted.rkt")
-         class:
+         class
          :
          (rename-out [define-typed-struct define-struct:]
                      [lambda: λ:]

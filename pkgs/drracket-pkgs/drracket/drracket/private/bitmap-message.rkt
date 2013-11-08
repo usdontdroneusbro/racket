@@ -4,7 +4,7 @@
 (provide bitmap-message%)
 
 (define bitmap-message%
-  (class: canvas%
+  (class canvas%
     (inherit min-width min-height get-dc refresh)
     (: bm (Option (Instance Bitmap%)))
     (define bm #f)
