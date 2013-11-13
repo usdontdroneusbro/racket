@@ -1207,7 +1207,26 @@
                 (new (class object%
                        (super-new)
                        (field [x : String "foo"])))
-                2))))
+                2))
+
+   ;; test occurrence typing for private fields
+   (check-ok
+    (class object%
+      (super-new)
+      (: x (U Integer String))
+      (define x 3)
+      (if (integer? x) (add1 x) 0))
+    (class object%
+      (super-new)
+      (: x (Pairof (U Integer String) String))
+      (define x (cons 1 "foo"))
+      (if (integer? (car x)) (add1 (car x)) 0))
+    (class object% (super-new)
+      (: x Void)
+      (define x (void))
+      (: y (U Integer String))
+      (define y "foo")
+      (if (string? y) (string-append y "bar") "")))))
 
 (define-go class-tests)
 

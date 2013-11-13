@@ -64,6 +64,22 @@
                                           [_ (int-err "update on mutable struct field")]))
                   proc poly pred)]
 
+    ;; class field ops
+    ;;
+    ;; This is a bit of an abuse of filters/objects. Normally, the
+    ;; object in an expression like (car? x) is the `x` identifier.
+    ;; However, for an application of a field accessor (accessor obj)
+    ;; the id `accessor` is the object. We need this so that we can
+    ;; refine the *range* of accessor, not the object's type.
+    [((Function: (list (arr: doms (Values: (list (Result: rng _ _))) _ _ _)))
+      (TypeFilter: u (list rst ... (FieldPE:)) x))
+     (make-Function
+       (list (make-arr* doms (update rng (-filter u x rst)))))]
+    [((Function: (list (arr: doms (Values: (list (Result: rng _ _))) _ _ _)))
+      (NotTypeFilter: u (list rst ... (FieldPE:)) x))
+     (make-Function
+       (list (make-arr* doms (update rng (-not-filter u x rst)))))]
+
     ;; otherwise
     [(t (TypeFilter: u (list) _))
      (restrict t u)]

@@ -20,7 +20,7 @@
          (types utils abbrev union subtype resolve)
          (typecheck check-below internal-forms)
          (utils tc-utils)
-         (rep type-rep)
+         (rep object-rep type-rep)
          (for-syntax racket/base)
          (for-template racket/base
                        (prefix-in c: racket/class)
@@ -644,12 +644,9 @@
      augments #:inner? #t))
 
   ;; construct field accessor types
-  (define (make-field-types field-names type-map #:private? [private? #f])
+  (define (make-field-types field-names type-map)
     (for/lists (_1 _2) ([f (in-set field-names)])
-      (define external
-        (if private?
-            f
-            (dict-ref internal-external-mapping f)))
+      (define external (dict-ref internal-external-mapping f))
       (define maybe-type (dict-ref type-map external #f))
       (values
        (-> (make-Univ) (or (and maybe-type (car maybe-type))
@@ -658,12 +655,35 @@
                            -Bottom)
            -Void))))
 
+  (define (make-private-field-types field-names getter-ids type-map)
+    (for/lists (_1 _2) ([field-name (in-set field-names)]
+                        [getter-id (in-list getter-ids)])
+      (define maybe-type (dict-ref type-map field-name #f))
+      (values
+       (make-Function
+        ;; This case is more complicated then for public fields because
+        ;; private fields support occurrence typing. The object is set
+        ;; as the field accessor's id, so that *its* rang type is refined
+        ;; for occurrence typing.
+        ;;
+        ;; FIXME: this is not quite sound yet because we need to detect
+        ;;        if the setter is ever called and put it in mvar-env
+        (list (make-arr* (list (make-Univ))
+                         (or (and maybe-type (car maybe-type))
+                             (make-Univ))
+                         #:filters -no-filter
+                         #:object
+                         (make-Path (list (make-FieldPE)) getter-id))))
+       (-> (make-Univ) (or (and maybe-type (car maybe-type))
+                           -Bottom)
+           -Void))))
+
   (define-values (field-get-types field-set-types)
     (make-field-types (hash-ref parse-info 'field-internals) fields))
   (define-values (private-field-get-types private-field-set-types)
-    (make-field-types (hash-ref parse-info 'private-fields)
-                      private-field-types
-                      #:private? #t))
+    (make-private-field-types (hash-ref parse-info 'private-fields)
+                              localized-private-field-get-names
+                              private-field-types))
   (define-values (inherit-field-get-types inherit-field-set-types)
     (make-field-types (hash-ref parse-info 'inherit-field-internals)
                       super-fields))
