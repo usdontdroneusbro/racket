@@ -140,7 +140,7 @@
                           #:unless (set-member? seen-types type+side))
                  (define name+ctc (dict-ref cache type+side))
                  (match-define (list name ctc) name+ctc)
-                 #`(define #,name #,ctc)))
+                 #`(define #,name #,(syntax-property ctc 'inferred-name (void)))))
              ;; reset before the next loop so that each expr only
              ;; generates contracts for types it refers to
              ;; (this prevents unbound id errors due to require
@@ -617,9 +617,13 @@
          (match-define (list (list field-names field-types) ...) fields)
          (match-define (list (list public-names public-types) ...) methods)
          (define/with-syntax (field-name ...) field-names)
-         (define/with-syntax (field-ctc ...) (map t->c field-types))
+         (define/with-syntax (field-ctc ...)
+           (for/list ([field-type (in-list field-types)])
+             (syntax-property (t->c field-type) 'inferred-name (void))))
          (define/with-syntax (public-name ...) public-names)
-         (define/with-syntax (public-ctc ...) (map t->c/method public-types))
+         (define/with-syntax (public-ctc ...)
+           (for/list ([public-type (in-list public-types)])
+             (syntax-property (t->c/method public-type) 'inferred-name (void))))
          #'(object/c-strict (public-name public-ctc) ...
                             (field [field-name field-ctc] ...))]
         [(Class: row-var
@@ -636,7 +640,9 @@
          (define method-contract-map
            (for/hash ([n (in-list name)] [f (in-list fcn)])
              (values n (list (generate-temporary n)
-                             (t->c/method f)))))
+                             (syntax-property (t->c/method f)
+                                              'inferred-name
+                                              (void))))))
          (define-values (public-names public-gens public-ctcs)
            (for/lists (_1 _2 _3) ([k+v (in-hash-pairs method-contract-map)])
              (values (car k+v) (car (cdr k+v)) (cadr (cdr k+v)))))
@@ -657,7 +663,9 @@
          (define/with-syntax (field-name ...) field-names)
          (define/with-syntax (field-gen ...)
            (generate-temporaries field-names))
-         (define/with-syntax (field-ctc ...) (map t->c field-types))
+         (define/with-syntax (field-ctc ...)
+           (for/list ([field-type (in-list field-types)])
+             (syntax-property (t->c field-type) 'inferred-name (void))))
          (define/with-syntax (augment-name ...) augment-names)
          (define/with-syntax (pubment-name ...) pubment-names)
          (define/with-syntax (override-name ...) override-names)
