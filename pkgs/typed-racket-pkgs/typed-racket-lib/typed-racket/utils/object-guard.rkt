@@ -49,7 +49,16 @@
   (method-names method-ctcs field-names field-ctcs)
   #:property prop:contract
   (build-contract-property
-   #:projection object/c-strict-proj))
+   #:projection object/c-strict-proj
+   #:name
+   (λ (ctc)
+    (match-define (base-object/c-strict
+                   methods method-ctcs
+                   fields field-ctcs)
+                  ctc)
+    ;; FIXME: this seems like a pretty inefficient way to do this
+    (contract-name
+     (make-object/c methods method-ctcs fields field-ctcs)))))
 
 (begin-for-syntax
  (define-syntax-class object/c-clause
