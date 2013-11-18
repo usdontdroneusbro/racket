@@ -90,7 +90,7 @@
 
 ;; generate-contract-def : Syntax -> Syntax
 ;; Construct a contracted definition for `require/typed`
-(define (generate-contract-def stx)
+(define (generate-contract-def stx #:name-mapping [name-mapping (make-hash)])
   (define prop (define/fixup-contract? stx))
   (define maker? (typechecker:contract-def/maker stx))
   (define flat? (typechecker:flat-contract-def stx))
@@ -107,6 +107,7 @@
           ;; this is for a `require/typed', so the value is not from the typed side
           #:typed-side #f
           #:kind kind
+          #:name-mapping name-mapping
           (type->contract-fail typ prop)))
        (quasisyntax/loc
         stx
@@ -121,6 +122,7 @@
 ;; Some type->contract translations are deferred, so resolve
 ;; those here and leave everything else as is.
 (define (change-contract-fixups forms)
+  (define name-mapping (make-hash))
   (define seen-types (mutable-set))
   (parameterize ([current-contract-cache (make-hash)]
                  [current-contract-types (box '())])
@@ -129,7 +131,8 @@
             [(not (define/fixup-contract? (car exprs)))
              (loop (cons (car exprs) results) (cdr exprs))]
             [else
-             (define fixed-up-e (generate-contract-def (car exprs)))
+             (define fixed-up-e
+               (generate-contract-def (car exprs) #:name-mapping name-mapping))
              ;; use these two parameters to collect contracts and
              ;; name them to reduce the size of the resulting syntax
              (define cache (current-contract-cache))
@@ -197,9 +200,10 @@
    [(untyped) 'typed]
    [(both) 'both]))
 
-(define (type->contract ty fail #:typed-side [typed-side #t] #:kind [kind 'impersonator])
+(define (type->contract ty fail #:typed-side [typed-side #t] #:kind [kind 'impersonator]
+                        #:name-mapping [name-mapping (make-hash)])
   (define vars (make-parameter '()))
-  (define extra-cache-vars (make-parameter '()))
+  (define dont-cache (make-parameter '()))
   (define current-contract-kind (make-parameter flat-sym))
   (define (increase-current-contract-kind! kind)
     (current-contract-kind (contract-kind-max (current-contract-kind) kind)))
@@ -351,8 +355,7 @@
                ;; see Poly
                (parameterize ([vars (append (for/list ([v (in-list vs)])
                                               (list v #'any/c))
-                                            (vars))]
-                              [extra-cache-vars '()])
+                                            (vars))])
                  (t->c/fun b #:method method?))]
               [else
                ;; extend row constraints and let Class contract
@@ -361,8 +364,7 @@
                (match-define (PolyRow-names: vs-nm constraints _) ty)
                (define/with-syntax seal/c (generate-temporary))
                (set-impersonator!)
-               (parameterize ([vars (cons (list (car vs) #'seal/c) (vars))]
-                              [extra-cache-vars '()])
+               (parameterize ([vars (cons (list (car vs) #'seal/c) (vars))])
                  #`(let ([seal/c (new-seal/c #,(car constraints)
                                              #,(cadr constraints)
                                              #,(caddr constraints))])
@@ -380,9 +382,8 @@
            (and cache-item
                 (andmap (λ (var-pair)
                           (define var (car var-pair))
-                          (not (or (member var (fv ty))
-                                   (has-name-free? var ty))))
-                        (append (vars) (extra-cache-vars)))
+                          (not (member var (fv ty))))
+                        (vars))
                 cache-item))) => car]
    [else
     (define ctc
@@ -392,59 +393,18 @@
         ;; infinite resolution of the application.
         [(App: (and rator (Name: _ _ _ #f)) rands _)
          #`(#,(t->c rator) #,@(map t->c rands))]
-        ;; A recursive name depends on other type aliases,
-        ;; possibly in mutual recursion. The contract will recur
-        ;; on all dependencies as a conservative approximation.
         [(Name: id pre-deps args #f)
-         (define n (syntax-e id))
-         (cond [;; When this is a recursive reference, just use
-                ;; the identifier stored in the environment.
-                (assoc n (vars)) => second]
+         ;; TODO: handle polymorphic Name types
+         (define name (syntax-e id))
+         (cond [;; Recursive references get indirected to an id
+                (dict-has-key? name-mapping (cons name typed-side))
+                #`(recursive-contract #,(dict-ref name-mapping (cons name typed-side)))]
                [else
-                ;; Helper function to construct the recursive contracts
-                ;; bound in the `letrec` below
-                (define (make-rec-contract type this-name new-vars use-env?)
-                  (define new-vars*
-                    ;; Ignore the current alias, since it needs to
-                    ;; get turend into a real contract at least once
-                    (dict-remove (append new-vars (vars)) this-name))
-                  (parameterize ([vars (if use-env? (append new-vars (vars)) new-vars*)]
-                                 [extra-cache-vars (list (list this-name))])
-                    (define kind (contract-kind->keyword
-                                  ;; FIXME: is this correct at all?
-                                  (contract-kind-min kind impersonator-sym)))
-                    (cond [(Poly? type)
-                           (match-define (Poly: vs b) type)
-                           (define args (generate-temporaries vs))
-                           (parameterize ([vars (append (for/list ([var vs] [arg args])
-                                                          (list var arg))
-                                                        (vars))])
-                             #`(λ (#,@args) (recursive-contract #,(t->c/both b) #,kind)))]
-                          [(and (Name? type) (Name-args type))
-                           (t->c/both type)]
-                          [else #`(recursive-contract #,(t->c/both type) #,kind)])))
-                ;; Remove self-reference here so that it doesn't overwrite
-                ;; the n->n* mapping in the `parameterize` below, which
-                ;; can break the generated contract
-                (define deps (remove id pre-deps free-identifier=?))
-                (define/with-syntax (n* dep* ...)
-                  (generate-temporaries (cons n deps)))
-                (define dep-vars
-                  (map list (map syntax-e deps) (syntax->list #'(dep* ...))))
-                (define new-vars (cons (list n #'n*) dep-vars))
-                ;; Construct contracts for each of the other type
-                ;; aliases that are depended on by the current type
-                ;; alias to establish the mutual recursion.
-                (define ctc (make-rec-contract (resolve-once ty) n new-vars #t))
-                (define dep-ctcs
-                  (for/list ([dep deps])
-                    (define dep-type (lookup-type-alias dep values))
-                    (make-rec-contract dep-type (syntax-e dep) new-vars #f)))
-                (define/with-syntax (dep-ctc ...) dep-ctcs)
-                #`(letrec ([n* #,ctc]
-                           [dep* dep-ctc]
-                           ...)
-                    n*)])]
+                (dict-set! name-mapping (cons name typed-side) (generate-temporary))
+                (define ctc
+                  (parameterize ([dont-cache (cons (cons ty typed-side) (dont-cache))])
+                    (t->c (resolve-once ty))))
+                #`(recursive-contract #,ctc)])]
         [(or (App: _ _ _) (Name: _ _ _ #t))
          (t->c (resolve-once ty))]
         ;; any/c doesn't provide protection in positive position
@@ -566,8 +526,7 @@
          (define poly-ids (generate-temporaries vs))
          (define/with-syntax (all/c ...) poly-ids)
          #`(let ([all/c (new-∀/c (quote all/c))] ...)
-             #,(parameterize ([vars (append (map list vs poly-ids) (vars))]
-                              [extra-cache-vars '()])
+             #,(parameterize ([vars (append (map list vs poly-ids) (vars))])
                  (t->c resolved)))]
         [(Poly: vs b)
          ;; Don't generate poly contracts for non-functions
@@ -583,23 +542,20 @@
            (exit (fail #:reason "cannot generate contract for non-function polymorphic type")))
          (if (not (from-untyped? typed-side))
              ;; in typed positions, no checking needed for the variables
-             (parameterize ([vars (append (for/list ([v (in-list vs)]) (list v #'any/c)) (vars))]
-                            [extra-cache-vars '()])
+             (parameterize ([vars (append (for/list ([v (in-list vs)]) (list v #'any/c)) (vars))])
                (t->c b))
              ;; in untyped positions, use `parameteric/c'
              (match-let ([(Poly-names: vs-nm _) ty])
                (with-syntax ([(v ...) (generate-temporaries vs-nm)])
                  (set-impersonator!)
                  (parameterize ([vars (append (stx-map list vs #'(v ...))
-                                              (vars))]
-                                [extra-cache-vars '()])
+                                              (vars))])
                    #`(parametric->/c (v ...) #,(t->c b))))))]
         [(? PolyRow?) (t->c/poly-row ty)]
         [(Mu: n b)
          (match-let ([(Mu-name: n-nm _) ty])
            (with-syntax ([(n*) (generate-temporaries (list n-nm))])
              (parameterize ([vars (cons (list n #'n*) (vars))]
-                            [extra-cache-vars '()]
                             [current-contract-kind
                              (contract-kind-min kind chaperone-sym)])
                (define ctc (t->c/both b))
@@ -730,17 +686,24 @@
         [else
          (exit (fail #:reason "contract generation not supported for this type"))]))
     (cond [(and cache
+                (not (member (cons ty typed-side) (dont-cache)))
                 ;; FIXME: factor this out into a helper function
                 (andmap (λ (var-pair)
                           (define var (car var-pair))
-                          (not (or (member var (fv ty))
-                                   (has-name-free? var ty))))
-                        (append (vars) (extra-cache-vars))))
-           (define id (generate-temporary))
-           (dict-set! cache (cons (Type-seq ty) typed-side) (list id ctc))
-           (define types-box (current-contract-types))
-           (set-box! types-box
-                     (cons (cons (Type-seq ty) typed-side) (unbox types-box)))
-           id]
+                          (not (member var (fv ty))))
+                        (vars)))
+           (define cache-key (cons (Type-seq ty) typed-side))
+           (define id (if (and (Name? ty) (not (Name-struct? ty)))
+                          (dict-ref name-mapping
+                                    (cons (syntax-e (Name-id ty)) typed-side))
+                          (generate-temporary)))
+           (cond [(dict-has-key? cache cache-key)
+                  (cadr (dict-ref cache cache-key))]
+                 [else
+                  (dict-set! cache (cons (Type-seq ty) typed-side) (list id ctc))
+                  (define types-box (current-contract-types))
+                  (set-box! types-box
+                            (cons (cons (Type-seq ty) typed-side) (unbox types-box)))
+                  id])]
           [else ctc])]))))
 
