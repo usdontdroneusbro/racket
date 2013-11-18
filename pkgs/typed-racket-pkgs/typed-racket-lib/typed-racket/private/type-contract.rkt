@@ -394,11 +394,24 @@
         [(App: (and rator (Name: _ _ _ #f)) rands _)
          #`(#,(t->c rator) #,@(map t->c rands))]
         [(Name: id pre-deps args #f)
-         ;; TODO: handle polymorphic Name types
          (define name (syntax-e id))
+         (define poly? (and args (not (null? args))))
          (cond [;; Recursive references get indirected to an id
                 (dict-has-key? name-mapping (cons name typed-side))
-                #`(recursive-contract #,(dict-ref name-mapping (cons name typed-side)))]
+                (define ctc (dict-ref name-mapping (cons name typed-side)))
+                (if poly? ctc #`(recursive-contract #,ctc))]
+               [poly?
+                (dict-set! name-mapping (cons name typed-side) (generate-temporary))
+                (define resolved (resolve-once ty))
+                (define params-id (generate-temporaries (or args null)))
+                (define params-sym (map syntax-e params-id))
+                (define new-vars (map list params-sym params-id))
+                (define ctc
+                  (parameterize ([vars (append new-vars (vars))]
+                                 [dont-cache (cons (cons ty typed-side) (dont-cache))])
+                    (t->c (if poly? (Poly-body params-sym resolved) resolved))))
+                (with-syntax ([(param ...) params-id])
+                  #`(λ (param ...) (recursive-contract #,ctc)))]
                [else
                 (dict-set! name-mapping (cons name typed-side) (generate-temporary))
                 (define ctc
