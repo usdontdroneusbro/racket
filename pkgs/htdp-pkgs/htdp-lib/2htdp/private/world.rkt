@@ -18,6 +18,9 @@
 
 (require/typed
  htdp/error
+ [check-arg
+  ((U String Symbol) Boolean (U String Symbol)
+   (U String Symbol Natural) Any -> Void)]
  [check-result
   ((U Symbol String) (Any -> Boolean) (U Symbol String) Any Any * -> Any)]
  [tp-error ((U String Symbol) String Any * -> Void)])
@@ -78,27 +81,23 @@
 ;; -----------------------------------------------------------------------------
 ;; packages for broadcasting information to the universe 
 
-#|
-(define-values (make-package package? package-world package-message)
-  (let ()
-    (struct package (world message) #:transparent)
-    (define (make-package w m)
-      (check-arg 'make-package (sexp? m) 'sexp "second" m)
-      (package w m))
-    (values make-package package? package-world package-message)))
+(struct: package ([world : World] [message : Sexp]) #:transparent)
+(: make-package (World Sexp -> package))
+(define (make-package w m)
+  (check-arg 'make-package (sexp? m) 'sexp "second" m)
+  (package w m))
 
 (provide
  make-package  ;; World S-expression -> Package
  package?      ;; Any -> Package
  package-world ;; Package -> World 
  )
-|#
 
 (define world%
   (last-mixin
    (clock-mixin
     (class object%
-      ;(inspect #f)
+      (inspect #f)
       (init-field [world0 : World])
       (init-field [name : (Option String)]
                   [state : (Option String)]
@@ -131,7 +130,7 @@
       (field [*out* : (Option Output-Port) #f] ;; (U #f OutputPort), where to send messages to 
              [*rec* : Custodian (make-custodian)]) ;; Custodian, monitor traffic)
 
-      #|
+      (: register-with-host (-> Any))
       (define/private (register-with-host)
         (define FMT "\nworking off-line\n")
         (define FMTtry 
@@ -142,23 +141,25 @@
                          FMT))
         ;; Input-Port -> [-> Void]
         ;; create closure (for thread) to receive messages and signal events
+        (: RECEIVE (Input-Port -> (-> Void)))
         (define (RECEIVE in)
+          (: RECEIVE (-> Void))
           (define (RECEIVE)
             (sync 
              (handle-evt
               in
-              (lambda (in) 
+              (lambda: ([in : Input-Port])
                 (define dis (text "the universe disappeared" 11 'red))
-                (with-handlers ((tcp-eof? 
+                (with-handlers ((tcp-eof?
                                  (compose (handler #f)
-                                          (lambda (e)
+                                          (lambda: ([e : Symbol])
                                             (set! draw (lambda (w) dis))
                                             (pdraw)
                                             e))))
                   ;; --- "the universe disconnected" should come from here ---
                   (define msg (tcp-receive in))
                   (cond
-                    [(sexp? msg) (prec msg) (RECEIVE)] ;; break loop if EOF
+                    [(sexp? msg) (prec (cast msg Sexp)) (RECEIVE)] ;; break loop if EOF
                     [#t (error 'RECEIVE "sexp expected, received: ~e" msg)]))))))
           RECEIVE)
         ;; --- now register, obtain connection, and spawn a thread for receiving
@@ -172,17 +173,18 @@
                                (if (= n 1) 
                                    (printf FMTtry register TRIES)
                                    (begin (sleep PAUSE) (try (- n 1)))))))
-              (define-values (in out) (tcp-connect register SQPORT))
+              (define-values (in out) (tcp-connect (assert register) SQPORT))
               (tcp-register in out name)
               (printf "... successful registered and ready to receive\n")
               (set! *out* out)
               (thread (RECEIVE in))))))
 
+      (: broadcast (Sexp -> Void))
       (define/private (broadcast msg)
-        (when *out* 
+        (define **out** *out*)
+        (when **out**
           (check-result 'send sexp? "Sexp expected; given ~e\n" msg)
-          (tcp-send *out* msg)))
-      |#
+          (tcp-send **out** msg)))
       
       ;; -----------------------------------------------------------------------
       (field
@@ -363,8 +365,7 @@
                       (lambda: ([w : World] [ke : Key-Event]) w))))
        (mouse  : (Option (World Integer Integer Mouse-Event -> World))
                on-mouse)
-       ;(rec    on-receive)
-       )
+       (rec    : (World Sexp -> World) (assert on-receive)))
 
       (: drawing Boolean)
       (define drawing #f) ;; Boolean; is a draw callback scheduled?
@@ -389,7 +390,7 @@
                 (define H (handler #t))
                 (with-handlers ([exn? H])
                   ; (define tag (object-name transform))
-                  (: nw (U stop-the-world World))
+                  (: nw (U stop-the-world World package))
                   (define nw (transform (send world get) arg ...))
                   (define (d) 
                     (with-handlers ((exn? H))
@@ -401,23 +402,22 @@
                   (define w '()) 
                   ;; set all to void, then w to null 
                   ;; when a high priority draw is scheduledd
-                  ;; --- 
-                  #|
-                  (when (package? nw)
-                    (broadcast (package-message nw))
-                    (set! nw (package-world nw)))
-                  |#
+                  ;; ---
+                  (define nw*
+                   (cond [(package? nw)
+                          (broadcast (package-message nw))
+                          (package-world nw)]
+                         [else nw]))
                   (cond
-                    [(stop-the-world? nw)
-                     ; (set! nw (stop-the-world-world nw))
-                     (define nw* (stop-the-world-world nw))
-                     (send world set tag nw*)
+                    [(stop-the-world? nw*)
+                     (define nw (stop-the-world-world nw*))
+                     (send world set tag nw)
                      (last-draw)
                      (callback-stop! 'name)
                      (enable-images-button)]
-                    [else
+                    [(not (package? nw*))
                      (: changed-world? Any)
-                     [define changed-world? (send world set tag nw)]
+                     [define changed-world? (send world set tag nw*)]
                      (: stop? Any)
                      [define stop? (stop (send world get))]
                      ;; this is the old "Robby optimization" see checked-cell:
@@ -438,7 +438,7 @@
                            ;; high!!  the scheduled callback didn't fire
                            (queue-callback (lambda () (d)) #t)]
                           [else 
-                           (set! draw# (assert (- draw# 1) exact-nonnegative-integer?))])]
+                           (set! draw# (- draw# 1))])]
                        [stop?
                         (last-draw)
                         (callback-stop! 'name)
@@ -473,7 +473,8 @@
       (def/cback pubment (pmouse x y me) (assert mouse procedure?))
       
       ;; receive revents
-      ; (def/cback pubment (prec msg) rec)
+      (: prec (Sexp -> Void))
+      (def/cback pubment (prec msg) rec)
       
       ;; ----------------------------------------------------------------------
       ;; -> Void 
@@ -517,9 +518,9 @@
       (define/public (callback-stop! msg)
         (stop! (send world get)))
 
-      (: handler (Boolean -> (exn -> Void)))
+      (: handler (Boolean -> ((U Symbol exn) -> Void)))
       (define (handler re-raise)
-        (lambda: ([e : exn])
+        (lambda: ([e : (U Symbol exn)])
           (disable-images-button)
           (stop! (if re-raise e (send world get)))))
 
@@ -529,7 +530,7 @@
           (let ([width width] [height height])
             (when (and width height) ;; and height
               (check-scene-dimensions "your to-draw clause" width height))
-            ; (when register (register-with-host))
+            (when register (register-with-host))
             (define w (send world get))
             (cond
               [(stop w) 
@@ -544,7 +545,7 @@
                (stop! (stop-the-world-world w))]
               [else (show-canvas)]))))
 
-      (: stop! ((U exn World) -> Void))
+      (: stop! ((U Symbol exn World) -> Void))
       (define/public (stop! w)
         (set! live #f)
         (custodian-shutdown-all *rec*))
