@@ -671,7 +671,9 @@
         (list (make-arr* (list (make-Univ))
                          (or (and maybe-type (car maybe-type))
                              (make-Univ))
-                         #:filters -no-filter
+                         #:filters
+                         (-FS (-not-filter (-val #f) getter-id (list (make-FieldPE)))
+                              (-filter (-val #f) getter-id (list (make-FieldPE))))
                          #:object
                          (make-Path (list (make-FieldPE)) getter-id))))
        (-> (make-Univ) (or (and maybe-type (car maybe-type))

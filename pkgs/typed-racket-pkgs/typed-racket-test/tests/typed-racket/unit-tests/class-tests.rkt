@@ -1221,12 +1221,18 @@
       (: x (Pairof (U Integer String) String))
       (define x (cons 1 "foo"))
       (if (integer? (car x)) (add1 (car x)) 0))
-    (class object% (super-new)
+    (class object%
+      (super-new)
       (: x Void)
       (define x (void))
       (: y (U Integer String))
       (define y "foo")
-      (if (string? y) (string-append y "bar") "")))))
+      (if (string? y) (string-append y "bar") ""))
+    (class object%
+      (super-new)
+      (: x (U #f Number))
+      (define x 3)
+      (when x (add1 x))))))
 
 (define-go class-tests)
 
