@@ -82,8 +82,7 @@
                    (λ ()
                      (unless (send frame-to-track is-shown?)
                        (show #f)
-                       (let ([timer timer])
-                         (and timer (send timer stop)))))]))))
+                       (and timer (send timer stop))))]))))
     
     (define/override (on-subwindow-event r evt)
       (and (is-shown?)
@@ -95,11 +94,10 @@
       (send yellow-message set-lab ls))
     
     (define/override (show on?)
-      (define timer* timer)
-      (when timer*
+      (when timer
         (cond
-          [on? (send timer* start 200 #f)]
-          [else (send timer* stop)]))
+          [on? (send timer start 200 #f)]
+          [else (send timer stop)]))
       (super show on?))
     
     (: show-over (Integer Integer Integer Integer [#:prefer-upper-left? Any] -> Void))
