@@ -54,7 +54,6 @@
 
 (define columns-string "~a columns")
 
-;; make-large-letters-dialog : string char top-level-window<%> -> void
 (: make-large-letters-dialog (String Char (Option (Instance Frame%)) -> (Option String)))
 (define (make-large-letters-dialog comment-prefix comment-character parent)
   (define dlg (new dialog% 
