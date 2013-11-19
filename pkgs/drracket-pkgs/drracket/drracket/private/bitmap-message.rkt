@@ -17,10 +17,10 @@
     (: set-bm ((Instance Bitmap%) -> Void))
     (define/public (set-bm b)
       (set! bm b)
-      (let ([bm bm])
-        (when bm
-          (min-width (send bm get-width))
-          (min-height (send bm get-height))))
+      (define bm* bm)
+      (when bm*
+        (min-width (send bm* get-width))
+        (min-height (send bm* get-height)))
       (refresh))
     (super-new (stretchable-width #f)
                (stretchable-height #f)
