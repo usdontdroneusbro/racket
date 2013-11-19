@@ -622,11 +622,11 @@
            (cond [(and maybe-type
                        (not (equal? (car maybe-type) top-func))
                        (not inner?))
-                  (function->method (car maybe-type) self-type)]
+                  (function->method (car maybe-type) (make-Univ))]
                  [(and maybe-type
                        (not (equal? (car maybe-type) top-func)))
                   (Un (-val #f)
-                      (function->method (car maybe-type) self-type))]
+                      (function->method (car maybe-type) (make-Univ)))]
                  [else (make-Univ)]))))
 
   (define method-types
@@ -697,7 +697,7 @@
       (define maybe-type (if (pair? pre-type) (car pre-type) pre-type))
       (or (and maybe-type
                (not (equal? maybe-type top-func))
-               (function->method maybe-type self-type))
+               (function->method maybe-type (make-Univ)))
           (make-Univ))))
 
   (define private-method-types
