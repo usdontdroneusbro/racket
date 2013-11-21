@@ -9,11 +9,7 @@
 
 
 (require typed/racket/gui
-         "stop.rkt" "world-type.rkt")
-
-(require/typed "check-aux.rkt"
-  [RATE Real]
-  [number->integer (Number Symbol Symbol -> Integer)])
+         "check-aux.rkt" "stop.rkt" "world-type.rkt")
 
 (define-type On-Tick
   (U (List (World -> World) Natural Natural)
