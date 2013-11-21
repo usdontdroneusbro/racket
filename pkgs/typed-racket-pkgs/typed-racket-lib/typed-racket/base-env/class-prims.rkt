@@ -448,12 +448,14 @@
                  (append rest-top (list plain-annotation))
                  private-fields)]
         ;; Identify super-new for the benefit of the type checker
-        [((~or (~literal super-new)
-               (~literal super-make-object)
-               (~literal super-instantiate))
+        [((~and (~or (~literal super-new)
+                     (~literal super-make-object)
+                     (~literal super-instantiate))
+                constructor-id)
           arg ...)
          (define new-non-clause
-           (non-clause (syntax-property stx 'tr:class:super-new #t)))
+           (non-clause
+            (syntax-property stx 'tr:class:super-new #'constructor-id)))
          (values methods (append rest-top (list new-non-clause))
                  private-fields)]
         [_ (values methods (append rest-top (list content))

@@ -1241,7 +1241,11 @@
       (super-new)
       (: home-region Any)
       (define home-reg #f)
-      (public* [home-region (lambda () #f)])))))
+      (public* [home-region (lambda () #f)])))
+
+   ;; fails, ensure error mentions `super-make-object`
+   (check-err #:exn #rx"super-make-object: positional"
+    (class object% (super-make-object)))))
 
 (define-go class-tests)
 

@@ -1011,8 +1011,10 @@
 ;; Error if any positional arguments were provided.
 (define (find-provided-inits stx super-inits)
   (define (pos-arg-error pos-args)
-    (tc-error/expr "positional arguments for super constructor not supported"
-                   #:stx pos-args))
+    (tc-error/expr
+     (format "~a: positional arguments for super constructor not supported"
+             (syntax-e (syntax-property stx 'tr:class:super-new)))
+     #:stx pos-args))
   (syntax-parse stx
     #:literals (#%plain-app #%plain-lambda list cons quote)
     [(#%plain-app super-go:id _ _ _ _
