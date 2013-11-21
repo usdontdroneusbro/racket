@@ -271,6 +271,11 @@
                         (syntax->datum #'cls.override-externals)
                         (syntax->datum #'cls.augment-externals)
                         (syntax->datum #'cls.pubment-externals))
+             'method-names-internal
+             (set-union (syntax->datum #'cls.public-internals)
+                        (syntax->datum #'cls.override-internals)
+                        (syntax->datum #'cls.augment-internals)
+                        (syntax->datum #'cls.pubment-internals))
              'all-internal
              (set-union (syntax->datum #'cls.init-internals)
                         (syntax->datum #'cls.init-field-internals)
@@ -333,7 +338,7 @@
   ;;          String -> String in the separate tables)
   (define-values (annotation-table augment-annotation-table)
     ((compose (setup-pubment-defaults (hash-ref parse-info 'pubment-names))
-              register-annotations)
+              (register-annotations (hash-ref parse-info 'method-names-internal)))
      top-level-exprs))
   (do-timestamp "built annotation table")
   ;; find the `super-new` call (or error if missing)
@@ -1067,11 +1072,12 @@
      (recur-on-all #'(e ...))]
     [_ '()]))
 
-;; register-annotations : Listof<Syntax>
+;; register-annotations : Listof<Symbol>
+;;                        -> Listof<Syntax>
 ;;                        -> Dict<Symbol, Type>, Dict<Symbol, Type>
 ;; Find : annotations and register them, error if duplicates are found
 ;; TODO: support `define-type`?
-(define (register-annotations stxs)
+(define ((register-annotations method-names) stxs)
   ;; check if the key is duplicated and return the new table
   ;; (erroring if it is a duplicate)
   (define (check-duplicate table name type)
@@ -1095,6 +1101,9 @@
          (#%plain-app void))
        (define name (syntax-e #'name-stx))
        (define type (parse-type #'type-stx))
+       (define method? (memq name method-names))
+       (when (and method? (not (method-type? type)))
+         (tc-error/stx #'type-stx "not a valid method type: ~a" type))
        (values (check-duplicate table name type) augment-table)]
       [(quote-syntax (:-augment name-stx:id type-stx))
        (define name (syntax-e #'name-stx))
@@ -1218,6 +1227,19 @@
     [(PolyRow-names: ns constraints body)
      (make-PolyRow ns constraints (method->function type))]
     [_ (tc-error/expr "expected a function type for method")]))
+
+;; method-type? : Type -> Boolean
+;; returns true if the type is a valid type to give in an
+;; annotation of a method in a class
+;; FIXME: this duplicates some code from contract generation
+;;        and class parsing
+(define (method-type? type)
+  (match (resolve type)
+    [(? Function?) #t]
+    [(Poly: _ body) (method-type? body)]
+    [(PolyDots: _ body) (method-type? body)]
+    [(PolyRow: _ _ body) (method-type? body)]
+    [_ #f]))
 
 ;; annotate-method : Syntax Type -> Syntax
 ;; Adds a self type annotation for the first argument and annotated

@@ -1232,7 +1232,16 @@
       (super-new)
       (: x (U #f Number))
       (define x 3)
-      (when x (add1 x))))))
+      (when x (add1 x))))
+
+   ;; fails, ensure that the error mentions that the method
+   ;; is given a bad method type
+   (check-err #:exn #rx"not a valid method type"
+    (class object%
+      (super-new)
+      (: home-region Any)
+      (define home-reg #f)
+      (public* [home-region (lambda () #f)])))))
 
 (define-go class-tests)
 
