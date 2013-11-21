@@ -8,6 +8,7 @@
          racket/match
          racket/pretty ;; DEBUG ONLY
          racket/set
+         racket/syntax
          syntax/parse
          "signatures.rkt"
          "tc-metafunctions.rkt"
@@ -1248,7 +1249,7 @@
 ;; the let-values binding for tc-expr
 (define (annotate-method stx self-type method-type)
   (syntax-parse stx
-    #:literals (let-values #%plain-lambda)
+    #:literals (let-values #%plain-lambda case-lambda)
     [(let-values ([(meth-name:id)
                    (#%plain-lambda (self-param:id id:id ...)
                      body ...)])
@@ -1277,6 +1278,19 @@
                                                            core-body ...))))
                             method-body ...)
                         'kw-lambda #t)])
+         m)]
+    ;; case-lambda methods
+    [(let-values ([(meth-name:id)
+                   (case-lambda
+                     [(self x ...) body] ...)])
+       m)
+     (define annotated-self-params
+       (for/list ([self-param (in-list (syntax->list #'(self ...)))])
+         (type-ascription-property #'self-param self-type)))
+     (define/with-syntax (annotated-self ...) annotated-self-params)
+     #`(let-values ([(#,(syntax-property #'meth-name 'type-label method-type))
+                     (case-lambda
+                       [(annotated-self x ...) body] ...)])
          m)]
     [_ (tc-error "annotate-method: internal error")]))
 

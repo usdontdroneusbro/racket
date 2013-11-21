@@ -1245,7 +1245,25 @@
 
    ;; fails, ensure error mentions `super-make-object`
    (check-err #:exn #rx"super-make-object: positional"
-    (class object% (super-make-object)))))
+    (class object% (super-make-object)))
+
+   ;; check that case-lambda methods work
+   (check-ok
+    (define c%
+      (class object%
+        (super-new)
+        (: m (case-> (Any -> Void)))
+        (public m)
+        (define m (case-lambda [(x) (void)]))))
+    (send (new c%) m 'anything))
+
+   ;; fails, test that case-lambda bodies are checked
+   (check-err #:exn #rx"Expected Integer, but got String"
+    (class object%
+      (super-new)
+      (: m (case-> (Any -> Integer)))
+      (public m)
+      (define m (case-lambda [(x) "bad"]))))))
 
 (define-go class-tests)
 
