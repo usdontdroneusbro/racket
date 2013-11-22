@@ -1286,7 +1286,7 @@
        m)
      (define annotated-self-params
        (for/list ([self-param (in-list (syntax->list #'(self ...)))])
-         (type-ascription-property #'self-param self-type)))
+         (type-ascription-property self-param self-type)))
      (define/with-syntax (annotated-self ...) annotated-self-params)
      #`(let-values ([(#,(syntax-property #'meth-name 'type-label method-type))
                      (case-lambda

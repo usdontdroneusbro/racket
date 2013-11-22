@@ -1249,6 +1249,12 @@
 
    ;; check that case-lambda methods work
    (check-ok
+    (class object%
+      (super-new)
+      (field [y : Integer 0])
+      (: m (case-> (Any -> Integer)))
+      (public m)
+      (define m (case-lambda [(x) y])))
     (define c%
       (class object%
         (super-new)
