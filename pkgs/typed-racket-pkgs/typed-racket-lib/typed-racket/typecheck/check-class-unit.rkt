@@ -320,19 +320,23 @@
                          #:stx (hash-ref parse-info 'superclass-expr))
           (values #f null null null null)])]
       [_ (int-err "Unhandled result")]))
+
   (define super-init-names    (dict-keys super-inits))
   (define super-field-names   (dict-keys super-fields))
   (define super-method-names  (dict-keys super-methods))
   (define super-augment-names (dict-keys super-augments))
+
   ;; establish a mapping between internal and external names
   (define internal-external-mapping
     (for/hash ([internal (hash-ref parse-info 'all-internal)]
                [external (hash-ref parse-info 'all-external)])
       (values internal external)))
+
   ;; trawl the body for top-level expressions
   (define make-methods-stx (hash-ref parse-info 'make-methods))
   (define top-level-exprs
     (trawl-for-property make-methods-stx 'tr:class:top-level))
+
   ;; augment annotations go in their own table, because they're
   ;; the only kind of type annotation that is allowed to be duplicate
   ;; (i.e., m can have type Integer -> Integer and an augment type of
@@ -342,6 +346,7 @@
               (register-annotations (hash-ref parse-info 'method-names-internal)))
      top-level-exprs))
   (do-timestamp "built annotation table")
+
   ;; find the `super-new` call (or error if missing)
   (define super-new-stxs
     (trawl-for-property make-methods-stx 'tr:class:super-new))
@@ -355,6 +360,7 @@
     (for/list ([(name val) (in-dict super-inits)]
                #:unless (member name provided-init-names))
       (cons name val)))
+
   ;; define which init names are optional
   (define optional-inits (hash-ref parse-info 'optional-inits))
   (define optional-external (for/set ([n optional-inits])
@@ -363,6 +369,7 @@
     (for/set ([(name val) (in-dict remaining-super-inits)]
               #:when (cadr val))
       name))
+
   ;; Type for self in method calls
   (define self-type
     (infer-self-type parse-info
@@ -379,6 +386,7 @@
   (match-define (Instance: (Class: _ inits fields methods augments))
                 self-type)
   (do-timestamp "built self type")
+
   ;; trawl the body for the local name table
   (define locals
     (trawl-for-property make-methods-stx 'tr:class:local-table))
@@ -388,6 +396,7 @@
                   local-super-table
                   local-augment-table local-inner-table)
     (construct-local-mapping-tables (car locals)))
+
   ;; types for private elements
   (define private-method-types
     (for/hash ([(name type) (in-dict annotation-table)]
@@ -397,6 +406,7 @@
     (for/hash ([(name type) (in-dict annotation-table)]
                #:when (set-member? (hash-ref parse-info 'private-fields) name))
       (values name (list type))))
+
   ;; start type-checking elements in the body
   (define-values (lexical-names lexical-types
                   lexical-names/top-level lexical-types/top-level)
@@ -415,9 +425,11 @@
                                local-private-table private-method-types
                                self-type))
   (do-timestamp "built local tables")
+
   (with-lexical-env/extend lexical-names/top-level lexical-types/top-level
     (check-super-new provided-super-inits super-inits))
   (do-timestamp "checked super-new")
+
   (with-lexical-env/extend lexical-names/top-level lexical-types/top-level
     (for ([stx top-level-exprs]
           ;; avoid checking these to avoid duplication and to avoid checking
@@ -426,11 +438,13 @@
           #:unless (syntax-property stx 'tr:class:type-annotation))
       (tc-expr stx)))
   (do-timestamp "checked other top-level exprs")
+
   (with-lexical-env/extend lexical-names/top-level lexical-types/top-level
     (check-field-set!s (hash-ref parse-info 'initializer-body)
                        local-field-table
                        inits))
   (do-timestamp "checked field initializers")
+
   ;; trawl the body and find methods and type-check them
   (define meth-stxs (trawl-for-property make-methods-stx 'tr:class:method))
   (define checked-method-types
@@ -440,17 +454,20 @@
                      internal-external-mapping meth-stxs
                      methods self-type)))
   (do-timestamp "checked methods")
+
   (define checked-augment-types
     (with-lexical-env/extend lexical-names lexical-types
       (check-methods (hash-ref parse-info 'augment-names)
                      internal-external-mapping meth-stxs
                      augments self-type)))
   (do-timestamp "checked augments")
+
   (with-lexical-env/extend lexical-names lexical-types
     (check-private-methods meth-stxs (hash-ref parse-info 'private-names)
                            private-method-types self-type))
   (do-timestamp "checked privates")
   (do-timestamp "finished methods")
+
   (define final-class-type
     (merge-types self-type checked-method-types checked-augment-types))
   (check-method-presence-and-absence
