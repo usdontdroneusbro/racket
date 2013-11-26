@@ -12,7 +12,7 @@
                                  'gl 'no-autoclear 'transparent
                                  'no-focus 'deleted))
                       #:optional]
-               [paint-callback (Any (Instance DC<%>) -> Any)
+               [paint-callback ((Instance Canvas%) (Instance DC<%>) -> Any)
                                #:optional]
                [label (Option String) #:optional]
                [gl-config (Option Any) #:optional]
