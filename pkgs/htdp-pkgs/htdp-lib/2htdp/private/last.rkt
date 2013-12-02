@@ -1,9 +1,6 @@
 #lang typed/racket
 
-(require "timer.rkt" "world-type.rkt")
-
-(require/typed racket/gui
-  [yield ((Evtof (U exn Integer)) -> (U exn Integer))])
+(require typed/racket/gui "timer.rkt" "world-type.rkt")
 
 (provide last-mixin)
 
