@@ -1,21 +1,14 @@
 #lang typed/racket
 
-(require typed/racket/gui
+(require "bitmap-message.rkt"
+         typed/racket/gui
          typed/framework
          string-constants)
 
-(define-type Bitmap-Message%
-  (Class (init [parent (Instance Horizontal-Panel%)])
-         [set-bm ((Instance Bitmap%) -> Void)]))
-
-(require/typed "bitmap-message.rkt"
-               [bitmap-message% Bitmap-Message%])
-
 (require/typed "insert-large-letters-helper.rkt"
                [make-color:mut
-                (case->
-                 (Byte Byte Byte -> (Instance Color%))
-                 (Byte Byte Byte Real -> (Instance Color%)))]
+                (case-> (Byte Byte Byte -> (Instance Color%))
+                        (Byte Byte Byte Real -> (Instance Color%)))]
                [make-bitmap:mono
                 (Positive-Integer Positive-Integer -> (Instance Bitmap%))])
 
@@ -93,7 +86,7 @@
   (define count (new message% [label (format columns-string 1000)] [parent info-bar]))
   (: pane1 (Instance Horizontal-Pane%))
   (define pane1 (new horizontal-pane% (parent info-bar)))
-  (: dark-msg (Instance Bitmap-Message%))
+  (: dark-msg (Object [set-bm ((Instance Bitmap%) -> Void)]))
   (define dark-msg (new bitmap-message% [parent info-bar]))
   (: pane2 (Instance Horizontal-Pane%))
   (define pane2 (new horizontal-pane% (parent info-bar)))
