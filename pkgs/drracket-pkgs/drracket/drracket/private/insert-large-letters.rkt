@@ -34,11 +34,11 @@
   (let ([pref-val (preferences:get 'drracket:large-letters-font)])
     (cond
       [(and pref-val (pair? pref-val))
-       (let: ([candidate : (Instance Font%)
-               (send the-font-list find-or-create-font
-                     (assert (cdr pref-val) exact-integer?)
-                     (assert (car pref-val) string?)
-                     'default 'normal 'normal)])
+       (let ([candidate
+              (send the-font-list find-or-create-font
+                    (assert (cdr pref-val) exact-integer?)
+                    (assert (car pref-val) string?)
+                    'default 'normal 'normal)])
          (if (equal? (send candidate get-face) (car pref-val))
              candidate
              (get-default-font)))]
