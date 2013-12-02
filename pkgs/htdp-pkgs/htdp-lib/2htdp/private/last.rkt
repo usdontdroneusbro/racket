@@ -24,7 +24,7 @@
     
     ;; -> World
     (define/public (last) 
-      (define result (cast (yield (assert end:ch evt?)) (U exn World)))
+      (define result (yield end:ch))
       (if (exn? result) (raise result) result))
     
     (field [dr:cust (current-custodian)])
