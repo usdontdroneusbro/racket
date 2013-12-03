@@ -610,7 +610,7 @@
          ;; FIXME: use this more efficiently in the full class contract
          (define this/c
            (if (from-untyped? typed-side) ; `this` is safe in typed classes
-               (t->c (make-Instance ty))
+               (generate-this-contract ty)
                #'any/c))
          (define method-contract-map
            (for/hash ([n (in-list name)] [f (in-list fcn)])
@@ -727,4 +727,16 @@
                             (cons (cons (Type-seq ty) typed-side) (unbox types-box)))
                   id])]
           [else ctc])]))))
+
+;; Generate a special contract for the `this` position in class
+;; contracts when classes are imported from untyped modules
+(define (generate-this-contract type)
+  (match-define (Class: _ _ fields methods _) type)
+  (match-define (list (list field-names _) ...) fields)
+  (match-define (list (list public-names _) ...) methods)
+  (define/with-syntax (field-name ...) field-names)
+  (define/with-syntax (public-name ...) public-names)
+  ;; Use `any/c` to avoid double wrapping on fields and methods
+  #'(object/c-strict (public-name any/c) ...
+                     (field [field-name any/c] ...)))
 
