@@ -609,13 +609,13 @@
          ;; The contract to use for the `this` position
          ;; FIXME: use this more efficiently in the full class contract
          (define this/c
-           (if (and (F? row-var) (from-untyped? typed-side))
+           (if (from-untyped? typed-side) ; `this` is safe in typed classes
                (t->c (make-Instance ty))
                #'any/c))
          (define method-contract-map
            (for/hash ([n (in-list name)] [f (in-list fcn)])
              (values n (list (generate-temporary n)
-                             (syntax-property (t->c/method f #:this this/c)
+                             (syntax-property #`(λ (x) #,(t->c/method f #:this #'x))
                                               'inferred-name
                                               (void))))))
          (define-values (public-names public-gens public-ctcs)
@@ -625,7 +625,7 @@
          (define override-names (set-subtract name pubment-names))
          (define/with-syntax (augment-ctc ...)
            (for/list ([f (in-list aug-fcn)])
-             (t->c/method f #:this this/c)))
+             #`(λ (x) #,(t->c/method f #:this #'x))))
          (define/with-syntax (pubment-ctc ...)
           (for/list ([name (in-list pubment-names)])
             (car (hash-ref method-contract-map name))))
@@ -648,19 +648,21 @@
            (for/list ([t (in-list by-name-init-ty)])
              (t->c/neg t)))
          (define/with-syntax (by-name-init ...) by-name-inits)
+         (define/with-syntax this-gen (generate-temporary 'this))
          (define class/c-stx
-           #'(let ([pub-gen pub-ctc] ...
+           #`(let ([this-gen #,this/c]
+                   [pub-gen pub-ctc] ...
                    [field-gen field-ctc] ...)
                (class/c
                 (init [by-name-init by-name-cnt] ...)
-                (pub-name pub-gen) ...
-                (inherit [pub-name pub-gen] ...)
-                (super [override-name override-ctc] ...)
+                (pub-name (pub-gen this-gen)) ...
+                (inherit [pub-name (pub-gen this-gen)] ...)
+                (super [override-name (override-ctc this-gen)] ...)
                 (field [field-name field-gen] ...)
                 (inherit-field [field-name field-gen] ...)
-                (inner [augment-name augment-ctc] ...)
-                (override [override-name override-ctc] ...)
-                (augment [pubment-name pubment-ctc] ...))))
+                (inner [augment-name (augment-ctc this-gen)] ...)
+                (override [override-name (override-ctc this-gen)] ...)
+                (augment [pubment-name (pubment-ctc this-gen)] ...))))
          (if seal/c
              #`(and/c #,seal/c #,class/c-stx)
              class/c-stx)]
