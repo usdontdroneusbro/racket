@@ -227,7 +227,7 @@
            ;; (and don't otherwise require full `case->')
            (define conv (match-lambda [(Keyword: kw kty _) (list kw (t->c/neg kty))]))
            (define (partition-kws kws) (partition (match-lambda [(Keyword: _ _ mand?) mand?]) kws))
-           (define (process-dom dom*)  (if method? (cons #'any/c dom*) dom*))
+           (define (process-dom dom*)  (if method? (cons method? dom*) dom*))
            (define (process-rngs rngs*)
              (match rngs*
                [(list r) r]
@@ -370,9 +370,9 @@
                                              #,(caddr constraints))])
                      #,(t->c/fun b #:method method?)))]))
 
-      (define (t->c/method t)
-        (cond [(PolyRow? t) (t->c/poly-row t #:method #t)]
-              [else (t->c/fun t #:method #t)]))
+      (define (t->c/method t #:this [this #'any/c])
+        (cond [(PolyRow? t) (t->c/poly-row t #:method this)]
+              [else (t->c/fun t #:method this)]))
 
       (define cache (current-contract-cache))
   (cond
@@ -606,10 +606,16 @@
          ;; the vars parameter.
          (define seal/c
            (and (F? row-var) (second (assoc (F-n row-var) (vars)))))
+         ;; The contract to use for the `this` position
+         ;; FIXME: use this more efficiently in the full class contract
+         (define this/c
+           (if (and (F? row-var) (from-untyped? typed-side))
+               (t->c (make-Instance ty))
+               #'any/c))
          (define method-contract-map
            (for/hash ([n (in-list name)] [f (in-list fcn)])
              (values n (list (generate-temporary n)
-                             (syntax-property (t->c/method f)
+                             (syntax-property (t->c/method f #:this this/c)
                                               'inferred-name
                                               (void))))))
          (define-values (public-names public-gens public-ctcs)
@@ -619,7 +625,7 @@
          (define override-names (set-subtract name pubment-names))
          (define/with-syntax (augment-ctc ...)
            (for/list ([f (in-list aug-fcn)])
-             (t->c/method f)))
+             (t->c/method f #:this this/c)))
          (define/with-syntax (pubment-ctc ...)
           (for/list ([name (in-list pubment-names)])
             (car (hash-ref method-contract-map name))))
