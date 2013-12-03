@@ -1268,7 +1268,7 @@
   (syntax-parse stx
     #:literals (let-values #%plain-lambda case-lambda)
     [(let-values ([(meth-name:id)
-                   (#%plain-lambda (self-param:id id:id ...)
+                   (#%plain-lambda (self-param:id . params)
                      body ...)])
        m)
      (define annotated-self-param
@@ -1277,12 +1277,12 @@
                      ;; attach source location to the lambda in order to
                      ;; obtain better error messages for arity errors
                      #,(quasisyntax/loc stx
-                         (#%plain-lambda (#,annotated-self-param id ...)
+                         (#%plain-lambda (#,annotated-self-param . params)
                                          body ...))])
          m)]
     [(let-values ([(meth-name:id)
                    (let-values (((core:id)
-                                 (#%plain-lambda (param:id ...)
+                                 (#%plain-lambda params
                                    core-body ...)))
                      method-body ...)])
        m)
@@ -1291,7 +1291,7 @@
                         #`(let-values (((core)
                                         ;; see comment above
                                         #,(quasisyntax/loc stx
-                                           (#%plain-lambda (param ...)
+                                           (#%plain-lambda params
                                                            core-body ...))))
                             method-body ...)
                         'kw-lambda #t)])

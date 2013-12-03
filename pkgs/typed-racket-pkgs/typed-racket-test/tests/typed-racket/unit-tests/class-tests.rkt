@@ -1269,7 +1269,13 @@
       (super-new)
       (: m (case-> (Any -> Integer)))
       (public m)
-      (define m (case-lambda [(x) "bad"]))))))
+      (define m (case-lambda [(x) "bad"]))))
+
+   ;; test that rest args work
+   (check-ok
+    (class object% (super-new)
+      (: m : Integer * -> Integer)
+      (define/public (m . xs) (apply + xs))))))
 
 (define-go class-tests)
 
