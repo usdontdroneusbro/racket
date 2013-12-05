@@ -5,58 +5,47 @@
          "last.rkt"
          "stop.rkt"
          "world-type.rkt"
-	 (rename-in
-          (only-in typed/2htdp/image
-                   Image Image-Color
-                   image? scale overlay/align empty-image)
-          [image? 2:image?])
+	 (rename-in (only-in typed/2htdp/image
+                             Image Image-Color image? scale overlay/align empty-image)
+                    [image? 2:image?])
          racket/runtime-path
          string-constants
          typed/mrlib/gif
          typed/mrlib/bitmap-label
          typed/racket/gui)
 
-(require/typed
- htdp/error
- [check-arg
-  ((U String Symbol) Boolean (U String Symbol)
-   (U String Symbol Natural) Any -> Void)]
- [check-result
-  ((U Symbol String) (Any -> Boolean) (U Symbol String) Any Any * -> Any)]
- [tp-error ((U String Symbol) String Any * -> Void)])
+(require/typed htdp/error
+               [check-arg ((U String Symbol) Boolean (U String Symbol)
+                           (U String Symbol Natural) Any -> Void)]
+               [check-result ((U Symbol String) (Any -> Boolean) (U Symbol String) Any Any * -> Any)]
+               [tp-error ((U String Symbol) String Any * -> Void)])
 
-(require/typed
- "universe-image.rkt"
- [check-scene-dimensions ((U Symbol String) Natural Natural -> Void)]
- [check-scene-result ((U Symbol String) Image -> Image)]
- [disable-cache (Image -> (Instance Snip%))]
- [image-height (Image -> Natural)]
- [image-width (Image -> Natural)]
- [text (String Positive-Integer Image-Color -> Image)]
- [draw-image (Image (Instance DC<%>) Natural Natural -> Void)]
- [insert-into-pasteboard ((Instance Pasteboard%) Image -> Void)]
- [delete-first-snip ((Instance Pasteboard%) -> Void)])
+(require/typed "universe-image.rkt"
+               [check-scene-dimensions ((U Symbol String) Natural Natural -> Void)]
+               [check-scene-result ((U Symbol String) Image -> Image)]
+               [disable-cache (Image -> (Instance Snip%))]
+               [image-height (Image -> Natural)]
+               [image-width (Image -> Natural)]
+               [text (String Positive-Integer Image-Color -> Image)]
+               [draw-image (Image (Instance DC<%>) Natural Natural -> Void)]
+               [insert-into-pasteboard ((Instance Pasteboard%) Image -> Void)]
+               [delete-first-snip ((Instance Pasteboard%) -> Void)])
 
 (define-type Pad-Event String)
 
-(require/typed
- "pad.rkt"
- [game-pad Image]
- [pad-event? (Any -> Boolean)]
- [pad=? (Pad-Event Pad-Event -> Boolean)])
+(require/typed "pad.rkt"
+               [game-pad Image]
+               [pad-event? (Any -> Boolean)]
+               [pad=? (Pad-Event Pad-Event -> Boolean)])
 
 (define-type (Checked-Cell% X)
-  (Class (init-field [value0 X]
-                     [ok? (X -> Boolean)])
+  (Class (init-field [value0 X] [ok? (X -> Boolean)])
          (init [display (Option String) #:optional])
-         (field [value X]
-                [pb (Option (Instance Pasteboard%))])
+         (field [value X] [pb (Option (Instance Pasteboard%))])
          [set ((U Symbol String) X -> Any)]
          [get (-> X)]))
 
-(require/typed
- "checked-cell.rkt"
- [checked-cell% Checked-Cell%])
+(require/typed "checked-cell.rkt" [checked-cell% Checked-Cell%])
 
 (provide world% aworld%)
 
@@ -139,7 +128,6 @@
         (define FMTcom 
           (string-append "unable to register with ~a due to protocol problems" 
                          FMT))
-        ;; Input-Port -> [-> Void]
         ;; create closure (for thread) to receive messages and signal events
         (: RECEIVE (Input-Port -> (-> Void)))
         (define (RECEIVE in)
@@ -241,11 +229,9 @@
       (define/private (add-game-pad scene)
         (if (boolean? pad) scene (overlay/align 'left 'bottom (assert game-pad-image 2:image?) scene)))
 
-      (: deal-with-key
-         (All (r #:row)
-           ((Class #:row-var r [on-char ((Instance Key-Event%) -> Void)])
-            ->
-            (Class #:row-var r [on-char ((Instance Key-Event%) -> Void)]))))
+      (: deal-with-key (All (r #:row) ((Class #:row-var r [on-char ((Instance Key-Event%) -> Void)])
+                                       ->
+                                       (Class #:row-var r [on-char ((Instance Key-Event%) -> Void)]))))
       (define/public (deal-with-key %)
         (if (and (not on-key) (not on-pad) (not on-release))
             %
@@ -259,11 +245,9 @@
 		      [(and pad (pad-event? e:str)) (ppad e:str)]
 		      [else (pkey e:str)])))))))
 
-      (: deal-with-mouse
-         (All (r #:row)
-           ((Class #:row-var r [on-event ((Instance Mouse-Event%) -> Void)])
-            ->
-            (Class #:row-var r [on-event ((Instance Mouse-Event%) -> Void)]))))
+      (: deal-with-mouse (All (r #:row) ((Class #:row-var r [on-event ((Instance Mouse-Event%) -> Void)])
+                                         ->
+                                         (Class #:row-var r [on-event ((Instance Mouse-Event%) -> Void)]))))
       (define/public (deal-with-mouse %)
         (if (not on-mouse) 
             ;; No mouse handler => discard mouse events (so snip are not selected
@@ -293,9 +277,7 @@
         (create-frame/universe))
       
       ;; effect: create, show and set the-frame
-      (: create-frame/universe
-         (-> Void)
-         #:augment ((Instance Frame%) Custodian -> (Values (-> Void) (-> Void))))
+      (: create-frame/universe (-> Void) #:augment ((Instance Frame%) Custodian -> (Values (-> Void) (-> Void))))
       (define/pubment (create-frame/universe)
         (define play-back:cust (make-custodian))
         (define frame (new (class frame%
@@ -318,16 +300,13 @@
                (vertical-inset INSET)))
         (define width* width)
         (define height* height)
-        (when width*
-          (send editor-canvas min-client-width (+ width* INSET INSET)))
-        (when height*
-          (send editor-canvas min-client-height (+ height* INSET INSET)))
+        (when width* (send editor-canvas min-client-width (+ width* INSET INSET)))
+        (when height* (send editor-canvas min-client-height (+ height* INSET INSET)))
         (set!-values (enable-images-button disable-images-button)
                      (inner (values void void) create-frame/universe frame play-back:cust))
         (send editor-canvas focus)
         (send frame show #t))
       
-      ;; Image -> Void
       ;; show the image in the visible world
       (: show (Image -> Void))
       (define/public (show pict0)
@@ -336,8 +315,6 @@
         (send visible lock #f)
         (let ([c (send visible get-canvas)])
           (delete-first-snip visible)
-          ;; FIXME: needs to allow depth subtyping in merging
-          ;;        class types with #:implements
           (insert-into-pasteboard visible pict)
           (send visible lock #t)
           (send visible end-edit-sequence)
@@ -477,13 +454,11 @@
       (def/cback pubment (prec msg) rec)
       
       ;; ----------------------------------------------------------------------
-      ;; -> Void 
       ;; draw : render the given world or this world (if #f)
       (: pdraw (-> Void))
       (define/private (pdraw) 
         (show (ppdraw)))
       
-      ;; -> Scene
       ;; produce the scene for the this state
       (: ppdraw (-> Image))
       (define/public (ppdraw)
@@ -567,11 +542,9 @@
 
 ;; turn the list of thunks into animated gifs 
 ;; effect: overwrite the ANIMATED-GIF-FILE (in current directory)
-;; [Listof (-> bitmap)] -> Void
 ;; turn the list of thunks into animated gifs 
 ;; effect: overwrite the ANIMATED-GIF-FILE (in current directory)
-(: create-animated-gif
-   (Real (Listof (U (Instance Bitmap%) (-> (Instance Bitmap%)))) -> Void))
+(: create-animated-gif (Real (Listof (U (Instance Bitmap%) (-> (Instance Bitmap%)))) -> Void))
 (define (create-animated-gif R bitmap-list)
   (when (file-exists? ANIMATED-GIF-FILE) (delete-file ANIMATED-GIF-FILE))
   (write-animated-gif bitmap-list (if (and (> R 0) (< R +inf.0)) (exact-floor R) 5)
@@ -587,7 +560,6 @@
     (inherit-field world0 draw rate width height record?)
     (inherit show callback-stop!)
     
-    ;; -> String or false
     (: recordable-directory : (-> (Option Path-String)))
     (define/private (recordable-directory)
       (let ([record? record?])
@@ -640,7 +612,6 @@
       (set! image-history (cons image image-history))
       image)
     
-    ;; --> Void
     ;; re-play the history of events; create a png per step; create animated gif
     ;; effect: write to user-chosen directory
     (: play-back (-> Void))
@@ -654,7 +625,6 @@
       (define bmps '())
       (define width* (assert width exact-positive-integer?))
       (define height* (assert height exact-positive-integer?))
-      ;; Image -> Void
       (: save-image (Image -> Image))
       (define (save-image img)
         (define bm (make-bitmap width* height*))
