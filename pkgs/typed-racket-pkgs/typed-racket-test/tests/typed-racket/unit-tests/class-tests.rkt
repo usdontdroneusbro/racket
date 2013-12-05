@@ -1275,7 +1275,13 @@
    (check-ok
     (class object% (super-new)
       (: m : Integer * -> Integer)
-      (define/public (m . xs) (apply + xs))))))
+      (define/public (m . xs) (apply + xs))))
+
+   ;; test `define:` inside typed classes
+   (check-ok
+    (class object% (super-new)
+      (define: x : Integer 3)
+      (add1 x)))))
 
 (define-go class-tests)
 

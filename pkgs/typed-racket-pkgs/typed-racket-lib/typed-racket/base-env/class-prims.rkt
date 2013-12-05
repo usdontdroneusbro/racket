@@ -20,6 +20,7 @@
           syntax/stx
           unstable/list
           "internal.rkt"
+          "../private/syntax-properties.rkt"
           "../utils/tc-utils.rkt"
           "../types/utils.rkt"))
 
@@ -424,8 +425,13 @@
                  rest-top private-fields)]
         ;; private field definition
         [(define-values (id ...) . rst)
+         (define extra-annotations
+           (for/list ([id-stx (in-list (syntax->list #'(id ...)))]
+                      #:when (type-label-property id-stx))
+             (non-clause (syntax-property #`(: #,id-stx #,(type-label-property id-stx))
+                                          'tr:class:type-annotation #t))))
          (values methods
-                 (append rest-top (list content))
+                 (append rest-top extra-annotations (list content))
                  (append (syntax->list #'(id ...))
                          private-fields))]
         ;; special : annotation for augment interface
