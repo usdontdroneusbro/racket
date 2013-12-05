@@ -82,42 +82,46 @@
  package-world ;; Package -> World 
  )
 
+(require (for-syntax syntax/parse racket/syntax))
+(define-syntax (init-private stx)
+  (syntax-parse stx #:literals (:)
+    [(_) #'(begin)]
+    [(_ [name : type e ...] . rst)
+     (define/with-syntax internal (generate-temporary))
+     #'(begin (init [(internal name) : type e ...])
+              (: name type)
+              (define name internal)
+              (init-private . rst))]))
+
 (define world%
   (last-mixin
    (clock-mixin
     (class object%
       (inspect #f)
       (init-field [world0 : World])
-      (init-field [name : (Option String)]
-                  [state : (Option String)]
-                  [register : (Option String)]
-                  [check-with : (Any -> Boolean)]
-                  [on-key : (Option (World Key-Event -> World))]
-                  [on-release : (Option (World Key-Event -> World))]
-                  [on-pad : (Option (World Pad-Event -> World))]
-                  [on-mouse : (Option (World Integer Integer Mouse-Event -> World))]
-                  [record? : Any])
+      (init-field [record? : Any])
+      (init-private [name : (Option String)]
+                    [state : (Option String)]
+                    [register : (Option String)]
+                    [check-with : (Any -> Boolean)]
+                    [on-key : (Option (World Key-Event -> World))]
+                    [on-release : (Option (World Key-Event -> World))]
+                    [on-pad : (Option (World Pad-Event -> World))]
+                    [on-mouse : (Option (World Integer Integer Mouse-Event -> World))])
       (init [on-receive : (Option (World Sexp -> World))]
-            [on-draw : (U (List (World -> Image) Natural Natural)
-                          (World -> Image)
-                          #f)]
-            [stop-when : (U (World -> Boolean)
-                            (List (World -> Boolean) (World -> Image)))])
+            [on-draw : (U (List (World -> Image) Natural Natural) (World -> Image) #f)]
+            [stop-when : (U (World -> Boolean) (List (World -> Boolean) (World -> Image)))])
       
       ;; -----------------------------------------------------------------------
-      (field
-       [to-draw : (U (List (World -> Image) Natural Natural)
-                           (World -> Image)
-                           #f)
-                on-draw]
-       [world : (Instance (Checked-Cell% World))
-        (new (inst checked-cell% World) [value0 world0] [ok? check-with]
-             [display (and state (or name "your world program's state"))])])
-      
-      
+      (field [to-draw : (U (List (World -> Image) Natural Natural) (World -> Image) #f) on-draw])
+      (define: world : (Instance (Checked-Cell% World))
+               (new (inst checked-cell% World) [value0 world0] [ok? check-with]
+                    [display (and state (or name "your world program's state"))]))
+
+
       ;; -----------------------------------------------------------------------
-      (field [*out* : (Option Output-Port) #f] ;; (U #f OutputPort), where to send messages to 
-             [*rec* : Custodian (make-custodian)]) ;; Custodian, monitor traffic)
+      (define: *out* : (Option Output-Port) #f)
+      (define: *rec* : Custodian (make-custodian))
 
       (: register-with-host (-> Any))
       (define/private (register-with-host)
@@ -169,35 +173,27 @@
 
       (: broadcast (Sexp -> Void))
       (define/private (broadcast msg)
-        (define **out** *out*)
-        (when **out**
+        (when *out*
           (check-result 'send sexp? "Sexp expected; given ~e\n" msg)
-          (tcp-send **out** msg)))
+          (tcp-send *out* msg)))
       
       ;; -----------------------------------------------------------------------
-      (field
-       (draw   : (Option (World -> Image))
-               (let ([to-draw to-draw])
-                 (cond
-                  [(procedure? to-draw) to-draw]
-                  [(pair? to-draw)      (first to-draw)]
-                  [else to-draw])))
-       (live   : Boolean
-               (not (boolean? draw)))
-       (width  : (Option Natural)
-               (let ([to-draw to-draw])
-                 (if (pair? to-draw) (second to-draw) #f)))
-       (height : (Option Natural)
-               (let ([to-draw to-draw])
-                 (if (pair? to-draw) (third to-draw) #f))))
+      (field [draw : (Option (World -> Image))
+                   (let ([to-draw to-draw])
+                     (cond
+                      [(procedure? to-draw) to-draw]
+                      [(pair? to-draw)      (first to-draw)]
+                      [else to-draw]))]
+             [width : (Option Natural)
+                    (let ([to-draw to-draw]) (if (pair? to-draw) (second to-draw) #f))]
+             [height : (Option Natural)
+                     (let ([to-draw to-draw]) (if (pair? to-draw) (third to-draw) #f))])
+      (define: live : Boolean (not (boolean? draw)))
       
       ;; the visible world 
-      (field [enable-images-button : (-> Void)
-                                   void] ;; used if stop-when call produces #t
-             [disable-images-button : (-> Void)
-                                    void]
-             [visible : (Instance Pasteboard%)
-                      (new pasteboard%)])
+      (define: enable-images-button : (-> Void) void) ;; used if stop-when call produces #t
+      (define: disable-images-button : (-> Void) void)
+      (define: visible : (Instance Pasteboard%) (new pasteboard%))
 
       (: show-canvas (-> Void))
       (define/private (show-canvas)
@@ -328,28 +324,17 @@
       
       ;; ----------------------------------------------------------------------
       ;; callbacks 
-      (field
-       (key     : (World Key-Event -> World)
-                (let ([on-key on-key])
-                  (if on-key on-key (lambda: ([w : World] [ke : Key-Event]) w))))
-       (pad     : (Option (World Pad-Event -> World))
-                on-pad)
-       (game-pad-image : (Option Image) #f)
-       (release : (World Key-Event -> World)
-                (let ([on-release on-release])
-                  (if on-release
-                      on-release
-                      (lambda: ([w : World] [ke : Key-Event]) w))))
-       (mouse  : (Option (World Integer Integer Mouse-Event -> World))
-               on-mouse)
-       (rec    : (World Sexp -> World) (assert on-receive)))
+      (define: key : (World Key-Event -> World) (if on-key on-key (lambda: ([w : World] [ke : Key-Event]) w)))
+      (define: pad : (Option (World Pad-Event -> World)) on-pad)
+      (define: game-pad-image : (Option Image) #f)
+      (define: release : (World Key-Event -> World) (if on-release on-release (lambda: ([w : World] [ke : Key-Event]) w)))
+      (define: mouse : (Option (World Integer Integer Mouse-Event -> World)) on-mouse)
+      (define: rec : (World Sexp -> World) (assert on-receive))
 
-      (: drawing Boolean)
-      (define drawing #f) ;; Boolean; is a draw callback scheduled?
+      (define: drawing : Boolean #f) ;; Boolean; is a draw callback scheduled?
       (: set-draw#! (-> Void))
       (define (set-draw#!) (set! draw# (random 3)) (set! drawing #f))
-      (: draw# Integer)
-      (define draw# 0) 
+      (define: draw# : Integer 0)
       (set-draw#!)
       
       (define-syntax def/cback
@@ -367,16 +352,13 @@
                 (define H (handler #t))
                 (with-handlers ([exn? H])
                   ; (define tag (object-name transform))
-                  (: nw (U stop-the-world World package))
-                  (define nw (transform (send world get) arg ...))
+                  (define: nw : (U stop-the-world World package) (transform (send world get) arg ...))
                   (define (d) 
                     (with-handlers ((exn? H))
                       (pdraw))
                     (set-draw#!))
                   ;; ---
-                  ;; [Listof (Box [d | void])]
-                  (: w (Listof (Boxof (-> Void))))
-                  (define w '()) 
+                  (define: w : (Listof (Boxof (-> Void))) '()) 
                   ;; set all to void, then w to null 
                   ;; when a high priority draw is scheduledd
                   ;; ---
@@ -470,21 +452,20 @@
       
       ;; ---------------------------------------------------------------------------------------------
       ;; stop-when 
-      (field [stop : (World -> Any)
-                   (let ([stop-when stop-when])
-                     (let ((s (if (procedure? stop-when) stop-when (first stop-when))))
-                       (lambda: ([x : World])
-                         (define result (s x))
-                         (check-result (name-of s 'your-stop-when) boolean? "boolean" result)
-                         result)))]
-             [last-picture : (Option (World -> Image))
-              (let ([stop-when stop-when])
-                (if (pair? stop-when) (second stop-when) #f))])
+      (define: stop : (World -> Any)
+               (let ([stop-when stop-when])
+                 (let ((s (if (procedure? stop-when) stop-when (first stop-when))))
+                   (lambda: ([x : World])
+                     (define result (s x))
+                     (check-result (name-of s 'your-stop-when) boolean? "boolean" result)
+                     result))))
+      (define: last-picture : (Option (World -> Image))
+               (let ([stop-when stop-when])
+                 (if (pair? stop-when) (second stop-when) #f)))
       
       (: last-draw (-> Void))
       (define/private (last-draw)
-        (let ([last-picture last-picture])
-          (when last-picture (set! draw last-picture)))
+        (when last-picture (set! draw last-picture))
         (pdraw))
       
       ;; ---------------------------------------------------------------------------------------------
@@ -509,13 +490,11 @@
             (define w (send world get))
             (cond
               [(stop w) 
-               (let ([last-picture last-picture])
-                 (when last-picture (set! draw last-picture)))
+               (when last-picture (set! draw last-picture))
                (show-canvas)
                (stop! w)]
               [(stop-the-world? w) 
-               (let ([last-picture last-picture])
-                 (when last-picture (set! draw last-picture)))
+               (when last-picture (set! draw last-picture))
                (show-canvas)
                (stop! (stop-the-world-world w))]
               [else (show-canvas)]))))
@@ -552,8 +531,7 @@
                       #:one-at-a-time? #t
                       #:loop? #f))
 
-(: ANIMATED-GIF-FILE String)
-(define ANIMATED-GIF-FILE "i-animated.gif")
+(define: ANIMATED-GIF-FILE : String "i-animated.gif")
 
 (define aworld%
   (class world% (super-new)
