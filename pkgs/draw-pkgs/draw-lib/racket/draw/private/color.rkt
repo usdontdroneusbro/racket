@@ -84,11 +84,12 @@
 (define color-blue (class-field-accessor color% b))
 (define color-alpha (class-field-accessor color% a))
 
-;; byte byte byte real -> color%
-;; produce an immutable color% object
-(define (make-color r g b [a 1.0])
+;; byte byte byte real [#:immutable? any] -> color%
+;; produce a color% object
+(define (make-color r g b [a 1.0] #:immutable? [immutable? #t])
   (define color (make-object color% r g b a))
-  (send color set-immutable)
+  (when immutable?
+    (send color set-immutable))
   color)
 
 (define (color->immutable-color c)
