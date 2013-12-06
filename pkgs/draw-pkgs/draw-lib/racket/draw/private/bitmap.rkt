@@ -872,7 +872,7 @@
 (define/top (make-bitmap [exact-positive-integer? w]
                          [exact-positive-integer? h]
                          [any? [alpha? #t]]
-                         [any? [mono? #t]])
+                         [any? [mono? #f]])
   (make-object bitmap% w h mono? alpha?))
 
 (define/top (read-bitmap [(make-alts path-string? input-port?) filename]
