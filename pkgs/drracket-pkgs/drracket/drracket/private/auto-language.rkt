@@ -1,63 +1,61 @@
 #lang typed/racket/no-check
 
-(require ; typed/framework
-	 ; typed/racket/gui
-         framework
-         racket/gui
-         racket/class)
+(require typed/framework
+	 typed/racket/gui
+         #;framework
+         #;racket/gui
+         #;racket/class)
 
 (provide pick-new-language looks-like-module?)
 
-(define-type (Language:Language% Settings)
+(define-type Language:Language%
   (Class [capability-value (Symbol -> Any)]
          [config-panel
           ((Instance Panel%) ->
-           (case-> (-> Settings) (Settings -> Void)))]
+           (case-> (-> Any) (Any -> Void)))]
          [create-executable
-          (Settings (U (Instance Dialog%) (Instance Frame%)) String -> Void)]
-         [default-settings (-> Settings)]
-         [default-settings? (Settings -> Boolean)]
-         [first-opened (Settings -> Void)]
+          (Any (U (Instance Dialog%) (Instance Frame%)) String -> Void)]
+         [default-settings (-> Any)]
+         [default-settings? (Any -> Boolean)]
+         [first-opened (Any -> Void)]
          [front-end/complete-program
-          (Input-Port Settings -> (-> (U Sexp Syntax EOF)))]
-         [front-end/finished-complete-program (Settings -> Any)]
+          (Input-Port Any -> (-> (U Sexp Syntax EOF)))]
+         [front-end/finished-complete-program (Any -> Any)]
          [front-end/interaction
-          (Input-Port Settings -> (-> (U Sexp Syntax EOF)))]
+          (Input-Port Any -> (-> (U Sexp Syntax EOF)))]
          [get-comment-character (-> (Values String Char))]
          [get-language-name (-> String)]
          [get-language-numbers (-> (Pairof Number (Listof Number)))]
          [get-language-position (-> (Pairof String (Listof String)))]
          [get-language-url (-> (Option String))]
-         [get-metadata (Symbol Settings -> String)]
+         [get-metadata (Symbol Any -> String)]
          [get-metadata-lines (-> Natural)]
          [get-one-line-summary (-> String)]
          [get-reader-module (-> (Option Sexp))]
          [get-style-delta
           (-> (U #f (Instance Style-Delta%)
                  (Listof (List (Instance Style-Delta%) Number Number))))]
-         [extra-repl-information (Settings Output-Port -> Void)]
-         [marshall-settings (Settings -> Any)]
-         [metadata->settings (String -> Settings)]
-         [on-execute (Settings ((-> Any) -> Any) -> Any)]
-         [render-value (Any Settings Output-Port -> Void)]
+         [extra-repl-information (Any Output-Port -> Void)]
+         [marshall-settings (Any -> Any)]
+         [metadata->settings (String -> Any)]
+         [on-execute (Any ((-> Any) -> Any) -> Any)]
+         [render-value (Any Any Output-Port -> Void)]
          [render-value/format
-          (Any Settings Output-Port (U 'infinity Number) -> Void)]
-         [unmarshall-settings (Any -> (Option Settings))]))
+          (Any Any Output-Port (U 'infinity Number) -> Void)]
+         [unmarshall-settings (Any -> Any)]))
 
-(: pick-new-language (All (S)
-                          ((Instance Text:File<%>)
-                           (Listof (Instance (Language:Language% S)))
-                           (U #f (Instance (Language:Language% S))) (U #f S)
-                           -> 
-                           (values (U #f (Instance (Language:Language% S)))
-                                   (U #f S)))))
+(: pick-new-language : (Instance Text:File<%>)
+                       (Listof (Instance Language:Language%))
+                       (U #f (Instance Language:Language%)) Any
+                       -> 
+                       (values (U #f (Instance Language:Language%)) Any))
 (define (pick-new-language text all-languages module-language module-language-settings)
   (with-handlers ([exn:fail:read? (λ (x) (values #f #f))])
-    (let: ([found-language? : (U #f (Instance (Language:Language% S))) #f]
-           [settings : (U #f S) #f])
+    (let: ([found-language? : (U #f (Instance Language:Language%)) #f]
+           [settings : Any #f])
       
       (for-each
-       (λ: ([lang : (Instance (Language:Language% S))])
+       (λ: ([lang : (Instance Language:Language%)])
          (let ([lang-spec (send lang get-reader-module)])
            (when lang-spec
              (let* ([lines (send lang get-metadata-lines)]
@@ -101,6 +99,7 @@
 (define (looks-like-old-module-style? text)
   (with-handlers ((exn:fail:read? (λ (x) #f)))
     (let* ([tp (open-input-text-editor text 0 'end (lambda (s) s) text #t)]
+           ;; FIXME: this needs to use call-with-default-reading-parameterization
            [r1 (parameterize ([read-accept-reader #f]) (read tp))]
            [r2 (parameterize ([read-accept-reader #f]) (read tp))])
       (and (eof-object? r2)
