@@ -71,7 +71,7 @@
   (class frame%
     (inherit reflow-container move get-width get-height is-shown?)
     
-    (: frame-to-track (Option (Instance Frame%)))
+    (: frame-to-track (Option (Instance Window<%>)))
     (init-field [frame-to-track #f])
     (: timer (Option (Instance Timer%)))
     (define timer
