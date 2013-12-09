@@ -4,32 +4,28 @@
 
 (provide last-mixin)
 
-(: last-mixin
-   (All (r #:row)
-     ((Class #:row-var r #:implements Start-Stop<%>)
-      ->
-      (Class #:row-var r #:implements Start-Stop<%>
-             (field [end:ch Any]
-                    [dr:cust Custodian])
-             [last (-> World)]))))
+(: last-mixin (All (r #:row)
+                ((Class #:row-var r #:implements Start-Stop<%>)
+                 ->
+                 (Class #:row-var r #:implements Start-Stop<%>
+                        (field [end:ch Any]
+                               [dr:cust Custodian])
+                        [last (-> World)]))))
 (define (last-mixin cls)
   (class cls
     ;; to comunicate between stop! and last
     (field [end:ch  : (Channelof (U exn World)) ((inst make-channel (U exn World)))])
 
-    ;; X -> Void
     (define/override (stop! w)
       (send-to-last w)
       (super stop! w))
     
-    ;; -> World
     (define/public (last) 
       (define result (yield end:ch))
       (if (exn? result) (raise result) result))
     
     (field [dr:cust (current-custodian)])
 
-    ;; X -> Void
     ;; send x to last method
     (: send-to-last ((U exn World) -> Void))
     (define/private (send-to-last x)
