@@ -543,16 +543,10 @@
       (let ([record? record?])
         (and (path-string? record?) (directory-exists? record?) record?)))
     
-    ;; Frame Custodian ->* (-> Void) (-> Void)
     ;; adds the stop animation and image creation button, 
     ;; whose callbacks runs as a thread in the custodian
-    ;;
-    ;; TR TODO: this requires a different specialization/inner type than the
-    ;;          pubment method in the parent.
     (define/augment (create-frame/universe frm play-back-custodian)
       (define p (new horizontal-pane% [parent frm][alignment '(center center)]))
-      ;; these two definitions are here to avoid Undefined issues in TR
-      ;; tie the recursion explicitly with set! and use assert to recover
       (: stop-button (Option (Instance Button%)))
       (: image-button (Option (Instance Button%)))
       (define stop-button #f)
