@@ -8,8 +8,7 @@
 ;; tick field, which the super-class uses to define the callback.
 
 
-(require typed/racket/gui
-         "check-aux.rkt" "stop.rkt" "world-type.rkt")
+(require typed/racket/gui "check-aux.rkt" "stop.rkt" "world-type.rkt")
 
 (define-type On-Tick
   (U (List (World -> World) Natural Natural)
@@ -25,17 +24,16 @@
          [name-of-tick-handler (-> Symbol)]
          [stop! ((U exn World) -> Void)]))
 
-(: clock-mixin
-   (All (r #:row)
-        ((Class #:row-var r #:implements Start-Stop<%>)
-         ->
-         (Class #:row-var r #:implements Start-Stop<%>
-                (init-field [on-tick (Option On-Tick) #:optional])
-                (field [rate Real]
-                       [limit (Option Natural)]
-                       [tick (World -> World)]
-                       [tick# Natural]
-                       [timer (Instance Timer%)])))))
+(: clock-mixin (All (r #:row)
+                 ((Class #:row-var r #:implements Start-Stop<%>)
+                  ->
+                  (Class #:row-var r #:implements Start-Stop<%>
+                         (init-field [on-tick (Option On-Tick) #:optional])
+                         (field [rate Real]
+                                [limit (Option Natural)]
+                                [tick (World -> World)]
+                                [tick# Natural]
+                                [timer (Instance Timer%)])))))
 (define (clock-mixin cls)
   (class cls
     (inherit ptock)
@@ -59,9 +57,8 @@
       [else (void)])
     (define/override (start!)
       (unless (<= rate 0)
-        (send timer start
-              (assert (number->integer (* 1000 rate) 'big-bang/universe 'clock-rate)
-                      exact-nonnegative-integer?)))
+        (send timer start (assert (number->integer (* 1000 rate) 'big-bang/universe 'clock-rate)
+                                  exact-nonnegative-integer?)))
       (super start!))
     (define/override (stop! w)
       (send timer stop)
