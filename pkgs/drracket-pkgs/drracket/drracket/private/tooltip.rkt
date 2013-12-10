@@ -1,5 +1,4 @@
 #lang typed/racket
-
 (require typed/racket/gui)
 
 (provide tooltip-frame%)
@@ -121,4 +120,3 @@
 
     (: yellow-message (Object [set-lab ((Listof String) -> Void)]))
     (define yellow-message (new yellow-message% [parent this]))))
-
