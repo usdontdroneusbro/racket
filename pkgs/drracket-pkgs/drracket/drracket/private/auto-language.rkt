@@ -1,4 +1,4 @@
-#lang typed/racket/no-check
+#lang typed/racket
 
 (require typed/framework
 	 typed/racket/gui
@@ -92,13 +92,13 @@
       (looks-like-old-module-style? text)
       (with-handlers ((exn:fail? (λ (x) #f)))
         (procedure?
-         (read-language (open-input-text-editor text 0 'end (λ (x) x) text #f) 
+         (read-language (open-input-text-editor text 0 'end (λ: ([x : (Instance Snip%)]) x) text #f) 
                         (λ () #f)))))) 
 
 (: looks-like-old-module-style? ((Instance Text%) -> Boolean))
 (define (looks-like-old-module-style? text)
   (with-handlers ((exn:fail:read? (λ (x) #f)))
-    (let* ([tp (open-input-text-editor text 0 'end (lambda (s) s) text #t)]
+    (let* ([tp (open-input-text-editor text 0 'end (λ: ([x : (Instance Snip%)]) x) text #t)]
            ;; FIXME: this needs to use call-with-default-reading-parameterization
            [r1 (parameterize ([read-accept-reader #f]) (read tp))]
            [r2 (parameterize ([read-accept-reader #f]) (read tp))])
@@ -108,7 +108,7 @@
 
 (: looks-like-new-module-style? ((Instance Text%) -> Boolean))
 (define (looks-like-new-module-style? text)
-  (let* ([tp (open-input-text-editor text 0 'end (lambda (s) s) text #t)]
+  (let* ([tp (open-input-text-editor text 0 'end (λ: ([x : (Instance Snip%)]) x) text #t)]
          [l1 (with-handlers ([exn:fail? (lambda (exn) eof)])
                ;; If tp contains a snip, read-line fails.
                (read-line tp))])
