@@ -4,26 +4,6 @@
 
 (provide tooltip-frame%)
 
-(define-type YellowMessage%
-  (Class #:implements Canvas%
-         (init [parent (Instance Area-Container<%>)]
-               [style (Listof (U 'border 'control-border 'combo
-                                 'vscroll 'hscroll 'resize-corner
-                                 'gl 'no-autoclear 'transparent
-                                 'no-focus 'deleted))
-                      #:optional]
-               [paint-callback ((Instance Canvas%) (Instance DC<%>) -> Any)
-                               #:optional]
-               [label (Option String) #:optional]
-               [gl-config (Option Any) #:optional]
-               [enabled Any #:optional]
-               [vert-margin Natural #:optional]
-               [horiz-margin Natural #:optional]
-               [min-width (Option Natural) #:optional]
-               [min-height (Option Natural) #:optional])
-         [set-lab ((Listof String) -> Void)]))
-
-(: yellow-message% YellowMessage%)
 (define yellow-message%
   (class canvas%
     (inherit get-dc refresh get-client-size
@@ -31,6 +11,7 @@
              get-parent)
     (: labels (Listof String))
     (define labels '(""))
+    (: set-lab : (Listof String) -> Void)
     (define/public (set-lab _ls)
       (unless (equal? labels _ls)
         (set! labels _ls)
@@ -138,6 +119,6 @@
                [stretchable-width #f]
                [stretchable-height #f])
 
-    (: yellow-message (Instance YellowMessage%))
+    (: yellow-message (Object [set-lab ((Listof String) -> Void)]))
     (define yellow-message (new yellow-message% [parent this]))))
 
