@@ -5,6 +5,7 @@
          "last.rkt"
          "stop.rkt"
          "world-type.rkt"
+         (except-in "pad.rkt" game-pad)
 	 (rename-in (only-in typed/2htdp/image
                              Image Image-Color image? scale overlay/align empty-image)
                     [image? 2:image?])
@@ -32,11 +33,7 @@
                [delete-first-snip ((Instance Pasteboard%) -> Void)])
 
 (define-type Pad-Event String)
-
-(require/typed "pad.rkt"
-               [game-pad Image]
-               [pad-event? (Any -> Boolean)]
-               [pad=? (Pad-Event Pad-Event -> Boolean)])
+(require/typed "pad.rkt" [game-pad Image])
 
 (define-type (Checked-Cell% X)
   (Class (init-field [value0 X] [ok? (X -> Boolean)])
