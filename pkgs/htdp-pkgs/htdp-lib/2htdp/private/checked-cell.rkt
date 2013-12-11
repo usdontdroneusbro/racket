@@ -78,17 +78,16 @@
         (unless (boolean? b)
           (tp-error 'check-with "the test function ~a is expected to return a boolean, but it returned ~v" 
                     (object-name ok?) b))
-        (if b
-            nw
-            (let ()
-              (define check-with-name 
-                (let ([n (symbol->string (assert (object-name ok?) symbol?))])
-                  (if (regexp-match "check-with" n)
-                      "handler"
-                      n)))
-              (tp-error 'check-with "~a ~a ~v, which fails to pass check-with's ~a test"
-                        tag (if say-evaluated-to "evaluated to" "returned") 
-                        nw check-with-name)))))
+        (unless b
+          (define check-with-name 
+            (let ([n (symbol->string (assert (object-name ok?) symbol?))])
+              (if (regexp-match "check-with" n)
+                  "handler"
+                  n)))
+          (tp-error 'check-with "~a ~a ~v, which fails to pass check-with's ~a test"
+                    tag (if say-evaluated-to "evaluated to" "returned") 
+                    nw check-with-name))
+        nw))
     
     ;; Symbol Any -> Void 
     ;; effect: set value to v if distinct, also display it if pb exists
