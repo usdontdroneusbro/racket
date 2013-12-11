@@ -1,7 +1,7 @@
-#lang typed/racket
+#lang typed/racket/no-check
 
-(require ; typed/framework
-	 ; typed/racket/gui
+(require ;typed/framework
+	 ;typed/racket/gui
          framework
          racket/gui
          racket/class)
