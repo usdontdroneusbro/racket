@@ -5,6 +5,7 @@
          "last.rkt"
          "stop.rkt"
          "world-type.rkt"
+         "checked-cell.rkt"
          (except-in "pad.rkt" game-pad)
 	 (rename-in (only-in typed/2htdp/image
                              Image Image-Color image? scale overlay/align empty-image)
@@ -35,14 +36,6 @@
 (define-type Pad-Event String)
 (require/typed "pad.rkt" [game-pad Image])
 
-(define-type (Checked-Cell% X)
-  (Class (init-field [value0 X] [ok? (X -> Boolean)])
-         (init [display (Option String) #:optional])
-         (field [value X] [pb (Option (Instance Pasteboard%))])
-         [set ((U Symbol String) X -> Any)]
-         [get (-> X)]))
-
-(require/typed "checked-cell.rkt" [checked-cell% Checked-Cell%])
 
 (provide world% aworld%)
 
