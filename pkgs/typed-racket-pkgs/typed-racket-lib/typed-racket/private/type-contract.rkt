@@ -79,7 +79,7 @@
        (if reason (~a ": " reason) "."))
    to-check))
 
-(define (generate-contract-def stx)
+(define (generate-contract-def stx cache)
   (define prop (define/fixup-contract? stx))
   (define maker? (typechecker:contract-def/maker stx))
   (define flat? (typechecker:flat-contract-def stx))
@@ -89,74 +89,85 @@
         ((map fld-t (Struct-flds (lookup-type-name (Name-id *typ)))) #f . t:->* . *typ)
         *typ))
   (define kind (if flat? 'flat 'impersonator))
-  (define ctc
+  (match-define (list defs ctc)
     (type->contract typ
                     #:typed-side 'untyped
                     #:kind kind
+                    #:cache cache
                     (type->contract-fail
                      typ prop
                      #:ctc-str (if flat? "predicate" "contract"))))
   (syntax-parse stx #:literals (define-values)
     [(define-values (n) _)
      (ignore ; should be ignored by the optimizer
-       (quasisyntax/loc stx (define-values (n) #,ctc)))]
+      (quasisyntax/loc stx
+        (begin
+         #,@defs
+         (define-values (n) #,ctc))))]
     [_ (int-err "should never happen - not a define-values: ~a"
                 (syntax->datum stx))]))
 
-(define (generate-contract-def/provide stx)
+(define (generate-contract-def/provide stx cache)
   (match-define (list type untyped-id orig-id blame-id)
                 (contract-def/provide-property stx))
   (define failure-reason #f)
-  (define ctc
+  (define result
     (type->contract type
                     #:typed-side 'typed
                     #:kind 'impersonator
+                    #:cache cache
                     ;; FIXME: get rid of this interface, make it functional
                     (λ (#:reason [reason #f]) (set! failure-reason reason))))
   (syntax-parse stx
     #:literals (define-values)
     [(define-values ctc-id _)
      ;; no need for ignore, the optimizer doesn't run on this code
-     (if failure-reason
-         #`(define-syntax (#,untyped-id stx)
-             (tc-error/fields #:stx stx
-                              "could not convert type to a contract"
-                              #:more #,failure-reason
-                              "identifier" #,(symbol->string (syntax-e orig-id))
-                              "type" #,(pretty-format-type type #:indent 8)))
-         #`(begin (define ctc-id #,ctc)
-                  (define-module-boundary-contract #,untyped-id
-                    #,orig-id ctc-id
-                    #:pos-source #,blame-id
-                    #:srcloc (vector (quote #,(syntax-source orig-id))
-                                     #,(syntax-line orig-id)
-                                     #,(syntax-column orig-id)
-                                     #,(syntax-position orig-id)
-                                     #,(syntax-span orig-id)))))]))
+     (cond [failure-reason
+            #`(begin
+               (define-syntax (#,untyped-id stx)
+                (tc-error/fields #:stx stx
+                                 "could not convert type to a contract"
+                                 #:more #,failure-reason
+                                 "identifier" #,(symbol->string (syntax-e orig-id))
+                                 "type" #,(pretty-format-type type #:indent 8))))]
+           [else
+            (match-define (list defs ctc) result)
+            #`(begin #,@defs
+                     (define ctc-id #,ctc)
+                     (define-module-boundary-contract #,untyped-id
+                       #,orig-id ctc-id
+                       #:pos-source #,blame-id
+                       #:srcloc (vector (quote #,(syntax-source orig-id))
+                                        #,(syntax-line orig-id)
+                                        #,(syntax-column orig-id)
+                                        #,(syntax-position orig-id)
+                                        #,(syntax-span orig-id))))])]))
 
 ;; Syntax -> (Listof Syntax)
 ;; Generate contract definitions and contracted provides
 (define (change-provide-fixups forms)
+  (define ctc-cache (make-hash))
   (for/list ([form (in-list forms)])
     (if (contract-def/provide-property form)
-        (generate-contract-def/provide form)
+        (generate-contract-def/provide form ctc-cache)
         form)))
 
 ;; Syntax -> (Listof Syntax)
 ;; Generate contract definitions for type aliases and requires
 (define (change-contract-fixups forms)
-  (define alias-defs (fixup-type-aliases forms))
+  (define ctc-cache (make-hash))
+  (define alias-defs (fixup-type-aliases forms ctc-cache))
   (define require-typed-defs
     (for/list ([e (in-syntax forms)]
                #:unless (alias-contract-def e))
       (if (not (define/fixup-contract? e))
           e
-          (generate-contract-def e))))
+          (generate-contract-def e ctc-cache))))
   (append alias-defs require-typed-defs))
 
-;; fixup-type-aliases : (Listof Syntax) -> (Listof Syntax)
+;; fixup-type-aliases : (Listof Syntax) Hash -> (Listof Id) (Listof Syntax)
 ;; Generate contracts for mutually recursive type aliases
-(define (fixup-type-aliases *forms)
+(define (fixup-type-aliases *forms ctc-cache)
   (define forms
     (for/list ([*form (stx->list *forms)]
                #:when (alias-contract-def *form)
@@ -189,7 +200,7 @@
             ;; instead of chaperone, chaperone instead of impersonator)
             ;; since we want the most specific
             (or (non-contract-entry? ctc)
-                (generate-contract-def/alias e kind))))
+                (generate-contract-def/alias e kind ctc-cache))))
         ;; we reach a fixpoint if the #f/string entries don't change
         (if (equal? (filter non-contract-entry? current)
                     (filter non-contract-entry? old))
@@ -210,7 +221,7 @@
 
 ;; generate-contract-def/alias : Syntax -> (U Syntax #f)
 ;; Generate a contract that goes with a type alias
-(define (generate-contract-def/alias stx kind)
+(define (generate-contract-def/alias stx kind cache)
   (define prop (alias-contract-def stx))
   (define-values (typed-side type-stx)
     (syntax-case prop ()
@@ -220,31 +231,35 @@
   (define failure-reason #f)
   (syntax-parse stx #:literals (define-values)
     [(define-values (n) _)
-     (define/with-syntax cnt
+     (define result
        (type->contract typ
                        #:typed-side typed-side
                        #:kind kind
+                       #:cache cache
                        (λ (#:reason [reason #f])
-                          (set! failed? #t)
-                          (set! failure-reason reason)
-                          (free-id-table-set! alias-info #'n reason))))
+                         (set! failed? #t)
+                         (set! failure-reason reason)
+                         (free-id-table-set! alias-info #'n reason))))
      (cond [(and failed? (not (eq? kind 'impersonator))) #f]
            [failed?
             (ignore (quasisyntax/loc stx (void)))]
            [else
+            (match-define (list defs ctc) result)
             (free-id-table-set! alias-info #'n kind)
             (ignore
              (quasisyntax/loc stx
                (begin
+                #,@defs
                 ;; This expression is needed to communicate the table data to other
                 ;; modules. Ordinary environment serialization via #%type-decl doesn't work
                 ;; because #%type-decl is generated too early in the type-checker.
+                #;
                 (begin-for-syntax (require typed-racket/private/alias-info)
                                   (free-id-table-set! alias-info (quote-syntax n) (quote #,kind)))
                 (define-values (n)
                   ;; the recursive contract is actually needed in this case since these
                   ;; are all recursive/mutually recursive type aliases
-                  (recursive-contract cnt #,(contract-kind->keyword kind))))))])]
+                  (recursive-contract #,ctc #,(contract-kind->keyword kind))))))])]
     [_ (int-err "should never happen - not a define-values: ~a"
                 (syntax->datum stx))]))
 
@@ -319,16 +334,21 @@
    [(untyped) 'typed]
    [(both) 'both]))
 
-(define (type->contract ty init-fail #:typed-side [typed-side 'typed] #:kind [kind 'impersonator])
+(define (type->contract ty init-fail
+                        #:typed-side [typed-side 'typed]
+                        #:kind [kind 'impersonator]
+                        #:cache [cache (make-hash)])
   (let/ec escape
-    (define (fail #:reason [reason #f]) (escape (init-fail #:reason reason)))
+    (define (fail #:reason [reason #f])
+      (call-with-values (λ () (init-fail #:reason reason)) escape))
     (instantiate
       (optimize
         (type->static-contract ty #:typed-side typed-side fail)
         #:trusted-positive (not (from-untyped? typed-side))
         #:trusted-negative (not (from-typed? typed-side)))
       fail
-      kind)))
+      kind
+      #:cache cache)))
 
 
 
@@ -347,6 +367,29 @@
 (define (same sc)
   (triple sc sc sc))
 
+;; sc-cache : Hash<(Pair Integer Symbol), Static-Contract>
+;; This hashtable memoizes the static contracts generated from types.
+;; The table is keyed by a pair of a Type-seq number and a typed-side symbol
+(define sc-cache (make-hash))
+
+(define dont-cache (make-parameter null))
+(define bound-names (make-parameter null))
+
+;; A convenience macro for use in type->static-contract below that
+;; helps memoize the static-contract generation.
+(define-syntax (cached-match stx)
+  (syntax-parse stx
+    [(_ type-expr typed-side-expr match-clause ...)
+     #'(let ([type type-expr]
+             [typed-side typed-side-expr])
+         (define key (cons (Type-seq type) typed-side))
+         (cond [(hash-ref sc-cache key #f)]
+               [else
+                (define sc (match type match-clause ...))
+                (unless (or (member (Type-seq type) (dont-cache))
+                            (ormap (λ (n) (member n (fv type))) (bound-names)))
+                  (hash-set! sc-cache key sc))
+                sc]))]))
 
 (define (type->static-contract type init-fail #:typed-side [typed-side 'typed])
   (let/ec return
@@ -365,7 +408,7 @@
         (if (from-typed? typed-side)
             (fail #:reason "contract generation not supported for this type")
             sc))
-      (match type
+      (cached-match type typed-side
         ;; Applications of implicit recursive type aliases
         ;;
         ;; We special case this rather than just resorting to standard
@@ -380,11 +423,12 @@
                 (define name* (generate-temporary name))
                 (recursive-sc (list name*)
                               (list
-                               (t->sc (resolve-once type)
-                                      #:recursive-values
-                                      (hash-set recursive-values
-                                                (cons name 'app)
-                                                (recursive-sc-use name*))))
+                               (parameterize ([dont-cache (cons (Type-seq type) (dont-cache))])
+                                 (t->sc (resolve-once type)
+                                        #:recursive-values
+                                        (hash-set recursive-values
+                                                  (cons name 'app)
+                                                  (recursive-sc-use name*)))))
                               (recursive-sc-use name*))])]
         ;; Implicit recursive aliases
         [(Name: name-id _ _ (list ctc-t ctc-u ctc-b) #f)
@@ -407,7 +451,7 @@
         [(Base: sym cnt _ _)
          (flat/sc #`(flat-named-contract '#,sym (flat-contract-predicate #,cnt)) sym)]
         [(Refinement: par p?)
-         (and/sc (t->sc par) (flat/sc p?))]
+         (and/sc (t->sc par) (flat/sc type p?))]
         [(Union: elems)
          (define-values (numeric non-numeric) (partition (λ (t) (equal? 'number (Type-key t))) elems ))
          (define numeric-sc (numeric-type->static-contract (apply Un numeric)))
@@ -425,7 +469,12 @@
         [(Promise: t)
          (promise/sc (t->sc t))]
         [(Opaque: p?)
-         (flat/sc #`(flat-named-contract (quote #,(syntax-e p?)) #,p?))]
+         ;; The use of recursive-contract here lets us move the definition
+         ;; of the opaque type predicate after the contract if necessary
+         ;; for optimizing the expansion.
+         (flat/sc #`(recursive-contract
+                     (flat-named-contract (quote #,(syntax-e p?)) #,p?)
+                     #:flat))]
         [(Continuation-Mark-Keyof: t)
          (continuation-mark-key/sc (t->sc t))]
         ;; TODO: this is not quite right for case->
@@ -475,8 +524,9 @@
                  (define rv (for/fold ((rv recursive-values)) ((temp temporaries)
                                                                (v-nm vs-nm))
                               (hash-set rv v-nm (same (parametric-var/sc temp)))))
-                 (parametric->/sc temporaries
-                    (t->sc b #:recursive-values rv)))))]
+                 (parameterize ([bound-names (append (bound-names) vs-nm)])
+                   (parametric->/sc temporaries
+                     (t->sc b #:recursive-values rv))))))]
         [(PolyDots: (list vs ... dotted-v) b)
          (if (not (from-untyped? typed-side))
              ;; in positive position, no checking needed for the variables
