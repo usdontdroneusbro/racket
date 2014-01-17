@@ -17,6 +17,7 @@
  racket/match syntax/stx racket/syntax racket/list
  racket/format
  unstable/list
+ racket/dict
  (only-in racket/set set-intersect set-subtract)
  unstable/sequence
  (contract-req)
@@ -68,6 +69,19 @@
        (if reason (~a ": " reason) "."))
    to-check))
 
+;; The following two parameters should be parameterized together
+
+;; current-contract-cache : Parameter<Option<Dict<Id,Stx>>>
+;; This parameter controls whether contracts should be cached
+;; (non-#f) and if so stores a mutable dictionary from identifiers
+;; to contracts. Used to make serialization efficient.
+(define current-contract-cache (make-parameter #f))
+
+;; current-contract-ids :  Parameter<Option<Box<List<Type>>>>
+;; Records a list of types that need to be written out
+;; in a particular order for the cache above
+(define current-contract-types (make-parameter #f))
+
 ;; generate-contract-def : Syntax -> Syntax
 ;; Construct a contracted definition for `require/typed`
 (define (generate-contract-def stx)
@@ -81,18 +95,19 @@
      (let ([typ (if maker?
                     ((map fld-t (Struct-flds (lookup-type-name (Name-id typ)))) #f . t:->* . typ)
                     typ)])
-         (with-syntax ([cnt (type->contract
-                             typ
-                             ;; this is for a `require/typed', so the value is not from the typed side
-                             #:typed-side #f
-                             #:kind kind
-                             (type->contract-fail typ prop))])
-           (quasisyntax/loc 
-	    stx
-	    (define-values (n) 
-	      (recursive-contract 
-	       cnt
-	       #,(contract-kind->keyword kind))))))]
+       (define/with-syntax cnt
+         (type->contract
+          typ
+          ;; this is for a `require/typed', so the value is not from the typed side
+          #:typed-side #f
+          #:kind kind
+          (type->contract-fail typ prop)))
+       (quasisyntax/loc
+        stx
+        (define-values (n)
+          (recursive-contract
+           cnt
+           #,(contract-kind->keyword kind)))))]
     [_ (int-err "should never happen - not a define-values: ~a"
 		(syntax->datum stx))]))
 
@@ -100,10 +115,30 @@
 ;; Some type->contract translations are deferred, so resolve
 ;; those here and leave everything else as is.
 (define (change-contract-fixups forms)
-  (for/list ((e (in-syntax forms)))
-    (if (not (define/fixup-contract? e))
-        e
-        (generate-contract-def e))))
+  (parameterize ([current-contract-cache (make-hasheq)]
+                 [current-contract-types (box '())])
+    (let loop ([results '()] [exprs (syntax->list forms)])
+      (cond [(empty? exprs) (reverse results)]
+            [(not (define/fixup-contract? (car exprs)))
+             (loop (cons (car exprs) results) (cdr exprs))]
+            [else
+             (define fixed-up-e (generate-contract-def (car exprs)))
+             ;; use these two parameters to collect contracts and
+             ;; name them to reduce the size of the resulting syntax
+             (define cache (current-contract-cache))
+             (define type-box (current-contract-types))
+             (define defs
+               (for/list ([type (in-list (unbox type-box))])
+                 (define name+ctc (dict-ref cache type))
+                 (match-define (list name ctc) name+ctc)
+                 #`(define #,name #,ctc)))
+             ;; reset before the next loop so that each expr only
+             ;; generates contracts for types it refers to
+             ;; (this prevents unbound id errors due to require
+             ;;  depdendencies, e.g., from Opaque types)
+             (set-box! type-box '())
+             (loop (append (cons fixed-up-e defs) results)
+                   (cdr exprs))]))))
 
 ;; To avoid misspellings
 (define impersonator-sym 'impersonator)
@@ -299,6 +334,11 @@
         (increase-current-contract-kind! chaperone-sym))
 
 
+      (define cache (current-contract-cache))
+  (cond
+   [(and cache (dict-ref cache ty #f)) => car]
+   [else
+    (define ctc
       (match ty
         [(or (App: _ _ _) (Name: _)) (t->c (resolve-once ty))]
         ;; any/c doesn't provide protection in positive position
@@ -433,7 +473,9 @@
                (with-syntax ([(v ...) (generate-temporaries vs-nm)])
                  (set-impersonator!)
                  (parameterize ([vars (append (stx-map list vs #'(v ...))
-                                              (vars))])
+                                              (vars))]
+                                [current-contract-cache #f]
+                                [current-contract-types #f])
                    #`(parametric->/c (v ...) #,(t->c b))))))]
         [(PolyRow: vs _ b)
          (cond [(not (from-untyped? typed-side))
@@ -449,7 +491,9 @@
                 (match-define (PolyRow-names: vs-nm constraints _) ty)
                 (define/with-syntax seal/c (generate-temporary))
                 (set-impersonator!)
-                (parameterize ([vars (cons (list (car vs) #'seal/c) (vars))])
+                (parameterize ([vars (cons (list (car vs) #'seal/c) (vars))]
+                               [current-contract-cache #f]
+                               [current-contract-types #f])
                   #`(let ([seal/c (new-seal/c #,(car constraints)
                                               #,(cadr constraints)
                                               #,(caddr constraints))])
@@ -458,6 +502,8 @@
          (match-let ([(Mu-name: n-nm _) ty])
            (with-syntax ([(n*) (generate-temporaries (list n-nm))])
              (parameterize ([vars (cons (list n #'n*) (vars))]
+                            [current-contract-cache #f]
+                            [current-contract-types #f]
                             [current-contract-kind
                              (contract-kind-min kind chaperone-sym)])
                (define ctc (t->c/both b))
@@ -561,13 +607,20 @@
          #`(syntax/c #,(t->c t #:kind flat-sym))]
         [(Value: v) #`(flat-named-contract '#,v (lambda (x) (equal? x '#,v)))]
         ;; TODO Is this sound?
-	[(Param: in out) 
-	 (set-impersonator!)
-	 #`(parameter/c #,(t->c in) #,(t->c out))]
+        [(Param: in out)
+         (set-impersonator!)
+         #`(parameter/c #,(t->c in) #,(t->c out))]
         [(Hashtable: k v)
          (when (equal? kind flat-sym) (exit (fail)))
          #`(hash/c #,(t->c k #:kind chaperone-sym) #,(t->c v) #:immutable 'dont-care)]
         [else
-         (exit (fail #:reason "contract generation not supported for this type"))]))))
+         (exit (fail #:reason "contract generation not supported for this type"))]))
+    (cond [cache
+           (define id (generate-temporary))
+           (dict-set! cache ty (list id ctc))
+           (define types-box (current-contract-types))
+           (set-box! types-box (cons ty (unbox types-box)))
+           id]
+          [else ctc])]))))
 
 
