@@ -369,60 +369,54 @@
    [else
     (define ctc
       (match ty
-        ;; Applications of a potentially polymorphically
-        ;; recursive type constructor turns into a contract
-        ;; function application.
-        [(App: (and rator (Name: _ _ _ #f)) rands _)
-         #`(#,(t->c rator) #,@(map t->c rands))]
         ;; A recursive name depends on other type aliases,
         ;; possibly in mutual recursion. The contract will recur
         ;; on all dependencies as a conservative approximation.
-        [(Name: id deps args #f)
-         ;; Name -> Syntax
-         ;; Construct a contract function that corresponds to
-         ;; a type operator
-         (define (make-recname-ctc ty)
-           (match-define (Name: _ _ args #f) ty)
-           (define kind (contract-kind->keyword (current-contract-kind)))
-           (cond [args
-                  (match-define (Poly: vs b) (resolve-once ty))
-                  (define args (generate-temporaries vs))
-                  (parameterize ([vars (append (for/list ([var vs] [arg args])
-                                                 (list var arg))
-                                               (vars))])
-                    #`(λ (#,@args) (recursive-contract #,(t->c/both b) #,kind)))]
-                 [else #`(recursive-contract
-                          #,(t->c/both (resolve-once ty))
-                          #,kind)]))
+        [(Name: id pre-deps args #f)
          (define n (syntax-e id))
          (cond [;; When this is a recursive reference, just use
                 ;; the identifier stored in the environment.
                 (assoc n (vars)) => second]
                [else
-                (define/with-syntax (n* dep ...)
+                ;; Helper function to construct additional contracts
+                ;; for the dependency types
+                (define (make-dep-contract type this-name new-vars)
+                  (define new-vars*
+                    ;; Ignore the current alias, since it needs to
+                    ;; get turend into a real contract at least once
+                    (dict-remove (append new-vars (vars)) this-name))
+                  (parameterize ([vars new-vars*])
+                    (define kind (contract-kind->keyword
+                                  ;; FIXME: is this correct at all?
+                                  (contract-kind-min kind impersonator-sym)))
+                    #`(recursive-contract #,(t->c/both type) #,kind)))
+                ;; Remove self-reference here so that it doesn't overwrite
+                ;; the n->n* mapping in the `parameterize` below, which
+                ;; can break the generated contract
+                (define deps (remove id pre-deps free-identifier=?))
+                (define/with-syntax (n* dep* ...)
                   (generate-temporaries (cons n deps)))
                 (define dep-vars
-                  (map list (map syntax-e deps) (syntax->list #'(dep ...))))
-                (parameterize ([vars (cons (list n #'n*)
-                                           (append dep-vars (vars)))]
-                               [current-contract-kind
-                                ;; FIXME: is this correct at all?
-                                (contract-kind-min kind impersonator-sym)])
-                  ;; Construct contracts for each of the other type
-                  ;; aliases that are depended on by the current type
-                  ;; alias to establish the mutual recursion.
-                  (define ctc (make-recname-ctc ty))
-                  (define dep-ctcs
-                    (for/list ([dep deps])
-                      (define dep-type (lookup-type-alias dep values))
-                      (if (Name? dep-type)
-                          (make-recname-ctc dep-type)
-                          (t->c/both dep-type))))
-                  (define/with-syntax (dep-ctc ...) dep-ctcs)
-                  #`(letrec ([n* #,ctc]
-                             [dep dep-ctc]
-                             ...)
-                      n*))])]
+                  (map list (map syntax-e deps) (syntax->list #'(dep* ...))))
+                (define new-vars (cons (list n #'n*) dep-vars))
+                ;; Construct contracts for each of the other type
+                ;; aliases that are depended on by the current type
+                ;; alias to establish the mutual recursion.
+                (define mapped-ty (resolve-once ty))
+                (define ctc
+                  (parameterize ([vars (append new-vars (vars))])
+                    (define kind (contract-kind->keyword
+                                  (contract-kind-min kind impersonator-sym)))
+                    #`(recursive-contract #,(t->c/both mapped-ty) #,kind)))
+                (define dep-ctcs
+                  (for/list ([dep deps])
+                    (define dep-type (lookup-type-alias dep values))
+                    (make-dep-contract dep-type (syntax-e dep) new-vars)))
+                (define/with-syntax (dep-ctc ...) dep-ctcs)
+                #`(letrec ([n* #,ctc]
+                           [dep* dep-ctc]
+                           ...)
+                    n*)])]
         [(or (App: _ _ _) (Name: _ _ _ #t))
          (t->c (resolve-once ty))]
         ;; any/c doesn't provide protection in positive position
@@ -702,7 +696,13 @@
            id]
           [else ctc])]))))
 
+;; Check if a type has a Name type free in it. This helps
+;; determine if a contract should be cached for the type or
+;; not.
+;;
+;; FIXME: this is ridiculously slow, do something about it
 (define (has-name-free? name type)
+  (define seen-set (mutable-set))
   (let/ec escape
     (define (free-type? type)
      (type-case
@@ -710,9 +710,13 @@
       type
       [#:Name
        id deps arg struct?
-       (cond [(eq? (syntax-e id) name)
+       (cond [(set-member? seen-set name)
+              (make-Value #f)]
+             [(or (eq? (syntax-e id) name)
+                  (ormap (λ (id) (eq? (syntax-e id) name)) deps))
               (escape #t)]
              [else ;; dummy
+              (set-add! seen-set name)
               (make-Value #f)])]))
     (free-type? type)
     #f))
