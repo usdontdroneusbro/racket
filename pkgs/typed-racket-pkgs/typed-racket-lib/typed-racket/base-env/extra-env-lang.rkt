@@ -18,19 +18,40 @@
          types rep private utils
          (for-syntax (types-out abbrev numeric-tower union filter-ops)))
 
+;; FIXME: copy+paste from base-special-env.rkt, lift to appropriate
+;;        helper module later
+(begin-for-syntax
+ (define (make-template-identifier what where)
+   (let ([name (module-path-index-resolve (module-path-index-join where #f))])
+     (parameterize ([current-namespace (make-empty-namespace)])
+       (namespace-attach-module (current-namespace) ''#%kernel)
+       (parameterize ([current-module-declare-name name])
+         (eval `(,#'module any '#%kernel
+                  (#%provide ,what)
+                  (define-values (,what) #f))))
+       (namespace-require `(for-template ,name))
+       (namespace-syntax-introduce (datum->syntax #f what))))))
+
 ;; Also see env-lang.rkt, where some of this code was stolen from
 (define-syntax (-#%module-begin stx)
   (define-syntax-class clause
     #:description "[id type]"
     (pattern [id:identifier ty]
-             #:with register #'(register-type (quote-syntax id) ty)))
+             #:with register
+             #'(register-type (quote-syntax id) ty))
+    (pattern [id:identifier ty #:template-id-from mod-path]
+             #:with register
+             #'(register-type
+                (make-template-identifier (quote-syntax id) mod-path)
+                ty)))
   (syntax-parse stx #:literals (require provide begin)
     [(mb (~optional
           (~and extra (~or (begin . _)
                            (require . args)
                            (provide . args))))
+         (~optional (~seq (~and no-provide #:no-provide)))
          ~! binding:clause ...)
-     #'(#%plain-module-begin
+     #`(#%plain-module-begin
         extra
         (require (for-syntax typed-racket/env/env-req))
         (begin-for-syntax
@@ -44,7 +65,9 @@
             binding.register ...)))
         (begin-for-syntax (add-mod! (variable-reference->module-path-index
                                      (#%variable-reference))))
-        (provide binding.id ...))]
+        #,(if (attribute no-provide)
+              #'(begin)
+              #'(provide binding.id ...)))]
     [(mb . rest)
      #'(mb (begin) . rest)]))
 
