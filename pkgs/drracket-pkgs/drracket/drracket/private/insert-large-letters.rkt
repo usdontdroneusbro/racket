@@ -5,13 +5,6 @@
          typed/framework
          string-constants)
 
-(require/typed "insert-large-letters-helper.rkt"
-               [make-color:mut
-                (case-> (Byte Byte Byte -> (Instance Color%))
-                        (Byte Byte Byte Real -> (Instance Color%)))]
-               [make-bitmap:mono
-                (Positive-Integer Positive-Integer -> (Instance Bitmap%))])
-
 (provide insert-large-letters)
 
 (: insert-large-letters (String Char (Instance Text:Basic<%>) (Instance Frame%) -> Void))
@@ -159,11 +152,11 @@
 
 (: render-large-letters (String Char (Instance Font%) String (Instance Text:Basic<%>) -> (Instance Bitmap%)))
 (define (render-large-letters comment-prefix comment-character the-font str edit)
-  (define bdc (new bitmap-dc% [bitmap (make-bitmap:mono 1 1)]))
+  (define bdc (new bitmap-dc% [bitmap (make-bitmap 1 1 #f #t)]))
   (define-values (tw raw-th td ta) (send bdc get-text-extent str the-font))
   (define th (let-values ([(_1 h _2 _3) (send bdc get-text-extent "X" the-font)])
                (max raw-th h)))
-  (define tmp-color (make-color:mut 0 0 0))
+  (define tmp-color (make-color 0 0 0 #:immutable? #f))
   
   (: get-char (Real Real -> Char))
   (define (get-char x y)
@@ -173,9 +166,10 @@
           comment-character
           #\space)))  
   (define bitmap
-    (make-bitmap:mono
+    (make-bitmap
       (assert (max 1 (exact-floor tw)) positive?)
-      (assert (exact-floor th) positive?)))
+      (assert (exact-floor th) positive?)
+      #f #t))
   
   (: fetch-line (Real -> String))
   (define (fetch-line y)
