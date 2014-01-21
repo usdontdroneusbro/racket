@@ -9,7 +9,9 @@
  racket/private/kw racket/file racket/port syntax/parse racket/path
  (for-template (only-in racket/private/kw kw-expander-proc kw-expander-impl)
                racket/base racket/file racket/port racket/path racket/list)
+ (base-env base-structs)
  (env init-envs)
+ (only-in (rep type-rep) make-Evt)
  (rename-in (types abbrev numeric-tower union) [make-arr* make-arr])
  (for-syntax racket/base syntax/parse
              (only-in racket/syntax syntax-local-eval)))
@@ -198,4 +200,10 @@
   ;; for `define-runtime-module-path`
   [(make-template-identifier 'combine-module-path 'racket/runtime-path)
    (-> -Variable-Reference -Module-Path -Resolved-Module-Path)]
+  ;; for contracts
+  [(make-template-identifier 'apply-contract 'racket/contract/private/base)
+   (-poly (X) (-> Univ X Univ Univ -Symbol -Srcloc X))]
+  ;; these identifiers have contracts
+  [(make-template-identifier 'eof-evt 'racket/port)
+   (-> -Input-Port (make-Evt (-val eof)))]
   )

@@ -1597,7 +1597,7 @@
 [transplant-output-port (->opt -Output-Port (-opt (-> (-values (list (-opt -PosInt) (-opt -Nat) (-opt -PosInt))))) -PosInt [Univ (-> ManyUniv)] -Output-Port)]
 
 ;; Section 13.1.10.3
-[eof-evt (-> -Input-Port (make-Evt (-val eof)))]
+; [eof-evt (-> -Input-Port (make-Evt (-val eof)))]
 [read-bytes-evt (-> -Nat -Input-Port (make-Evt (Un -Bytes (-val eof))))]
 ;read-bytes!-evt (need progress event support)
 [read-bytes-avail!-evt
