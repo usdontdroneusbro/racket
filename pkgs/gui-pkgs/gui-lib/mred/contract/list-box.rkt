@@ -27,14 +27,16 @@
      ((is-a?/c list-box%) (is-a?/c control-event%) . -> . any)]
     [style (listof (one-of/c 'single 'multiple 'extended
                              'vertical-label 'horizontal-label
+                             'variable-columns 'column-headers
+                             'clickable-headers 'reorderable-headers
                              'deleted))]
     [selection (or/c exact-nonnegative-integer? false/c)]
     [font (is-a?/c font%)]
     [enabled any/c]
     [vert-margin (integer-in 0 1000)]
     [horiz-margin (integer-in 0 1000)]
-    [min-width dimension-non-zero/c]
-    [min-height dimension-non-zero/c]
+    [min-width min-width/c]
+    [min-height min-height/c]
     [stretchable-width any/c]
     [stretchable-height any/c])
    (append
@@ -62,7 +64,7 @@
      (any/c)
      any))
    (set
-    (->m (listof label-string?) any))
+    (->*m ((listof label-string?)) #:rest (listof (listof label-string?)) any))
    (set-data
     (->m exact-nonnegative-integer? any/c any))
    (set-first-visible-item

@@ -9,6 +9,11 @@
          vertical-panel%/c
          tab-panel%/c)
 
+(define panel-style/c
+  (listof (one-of/c 'border 'deleted
+                    'hscroll 'auto-hscroll
+                    'vscroll 'auto-vscroll)))
+
 (define panel%/c
  (and/c
   area-container-window<%>/c
@@ -16,7 +21,7 @@
   (class/c
    (init
     [parent parent/c]
-    [style (listof (one-of/c 'border 'deleted))]
+    [style panel-style/c]
     [enabled any/c]
     [vert-margin (integer-in 0 1000)]
     [horiz-margin (integer-in 0 1000)]
@@ -24,8 +29,8 @@
     [spacing (integer-in 0 1000)]
     [alignment (list/c (one-of/c 'left 'center 'right)
                        (one-of/c 'top 'center 'bottom))]
-    [min-width dimension-non-zero/c]
-    [min-height dimension-non-zero/c]
+    [min-width min-width/c]
+    [min-height min-height/c]
     [stretchable-width any/c]
     [stretchable-height any/c]))))
 
@@ -36,7 +41,7 @@
   (class/c
    (init
     [parent parent/c]
-    [style (listof (one-of/c 'border 'deleted))]
+    [style panel-style/c]
     [enabled any/c]
     [vert-margin (integer-in 0 1000)]
     [horiz-margin (integer-in 0 1000)]
@@ -44,8 +49,8 @@
     [spacing (integer-in 0 1000)]
     [alignment (list/c (one-of/c 'left 'center 'right)
                        (one-of/c 'top 'center 'bottom))]
-    [min-width dimension-non-zero/c]
-    [min-height dimension-non-zero/c]
+    [min-width min-width/c]
+    [min-height min-height/c]
     [stretchable-width any/c]
     [stretchable-height any/c])
    (set-orientation
@@ -60,7 +65,7 @@
   (class/c
    (init
     [parent parent/c]
-    [style (listof (one-of/c 'border 'deleted))]
+    [style panel-style/c]
     [enabled any/c]
     [vert-margin (integer-in 0 1000)]
     [horiz-margin (integer-in 0 1000)]
@@ -68,8 +73,8 @@
     [spacing (integer-in 0 1000)]
     [alignment (list/c (one-of/c 'left 'center 'right)
                        (one-of/c 'top 'center 'bottom))]
-    [min-width dimension-non-zero/c]
-    [min-height dimension-non-zero/c]
+    [min-width min-width/c]
+    [min-height min-height/c]
     [stretchable-width any/c]
     [stretchable-height any/c])
    (set-orientation
@@ -93,8 +98,8 @@
    [spacing (integer-in 0 1000)]
    [alignment (list/c (one-of/c 'left 'center 'right)
                       (one-of/c 'top 'center 'bottom))]
-   [min-width dimension-non-zero/c]
-   [min-height dimension-non-zero/c]
+   [min-width min-width/c]
+   [min-height min-height/c]
    [stretchable-width any/c]
    [stretchable-height any/c])
   (append

@@ -18,6 +18,9 @@
 (define dimension-non-zero/c (integer-in 0 10000))
 (define dimension/c (integer-in -10000 10000))
 
+(define min-width/c  (or/c dimension-non-zero/c #f))
+(define min-height/c (or/c dimension-non-zero/c #f))
+
 (define label/c (or/c label-string? (is-a?/c bitmap%)))
 (define parent/c (or/c (is-a?/c frame%) (is-a?/c dialog%)
                        (is-a?/c panel%) (is-a?/c pane%)))

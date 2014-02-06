@@ -18,8 +18,8 @@
     [enabled any/c]
     [vert-margin (integer-in 0 1000)]
     [horiz-margin (integer-in 0 1000)]
-    [min-width dimension-non-zero/c]
-    [min-height dimension-non-zero/c]
+    [min-width min-width/c]
+    [min-height min-height/c]
     [stretchable-width any/c]
     [stretchable-height any/c]
     [auto-resize any/c])

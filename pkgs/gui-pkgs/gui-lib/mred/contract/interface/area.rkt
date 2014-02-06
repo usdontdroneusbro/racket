@@ -17,12 +17,12 @@
 (define get-top-level-window/c
   (->m (or/c (is-a?/c frame%) (is-a?/c dialog%))))
 
-(define min-width/c
+(define min-width-method/c
   (case->m
     (-> dimension-non-zero/c)
     (-> dimension-non-zero/c any)))
 
-(define min-height/c
+(define min-height-method/c
   (case->m
     (-> dimension-non-zero/c)
     (-> dimension-non-zero/c any)))
@@ -43,7 +43,7 @@
    (get-graphical-min-size get-graphical-min-size/c)
    (get-parent             get-parent/c)
    (get-top-level-window   get-top-level-window/c)
-   (min-width              min-width/c)
-   (min-height             min-height/c)
+   (min-width              min-width-method/c)
+   (min-height             min-height-method/c)
    (stretchable-height     stretchable-height/c)
    (stretchable-width      stretchable-width/c)))
