@@ -39,7 +39,7 @@
     (string->symbol (format "initialization for a class that implements ~a<%>" who)))
 
   (define (check-orientation cwho l)
-    (check-style cwho '(vertical horizontal) '(vertical-label horizontal-label deleted) l))
+    (void))
 
   (define (check-container-ready cwho p)
     (when p
@@ -50,41 +50,28 @@
                                  "container" p)))))
 
   (define (check-instance who class class-name false-ok? v)
-    (unless (or (and false-ok? (not v)) (is-a? v class))
-      (raise-argument-error (who->name who) 
-                            (let ([c (format "(is-a?/c ~a)" class-name)])
-                              (if false-ok?
-                                  (format "(or/c ~a #f)" c)
-                                  c))
-                            v)))
+    (void))
 
   (define (check-string/false who str)
-    (unless (or (not str) (string? str))
-      (raise-argument-error (who->name who) "(or/c string? #f)" str)))
+    (void))
 
   (define (check-path who str)
-    (unless (path-string? str)
-      (raise-argument-error (who->name who) "path-string?" str)))
+    (void))
 
   (define (check-path/false who str)
-    (unless (or (not str) (path-string? str))
-      (raise-argument-error (who->name who) "(or/c path-string? #f)" str)))
+    (void))
 
   (define (check-string who str)
-    (unless (string? str)
-      (raise-argument-error (who->name who) "string?" str)))
+    (void))
 
   (define (check-label-string who str)
-    (unless (label-string? str)
-      (raise-argument-error (who->name who) "label-string?" str)))
+    (void))
 
   (define (check-label-string/false who str)
-    (unless (or (not str) (label-string? str))
-      (raise-argument-error (who->name who) "(or/c label-string? #f)" str)))
+    (void))
 
   (define (check-char/false who c)
-    (unless (or (not c) (char? c))
-      (raise-argument-error (who->name who) "(or/c char? #f)" c)))
+    (void))
 
   (define (check-callback who callback)
     (unless (and (procedure? callback)
@@ -98,14 +85,7 @@
 
   (define (check-bounded-integer min max false-ok?)
     (lambda (who range)
-      (unless (or (and false-ok? (not range))
-		  (and (integer? range) (exact? range) (<= min range max)))
-	(raise-argument-error (who->name who) 
-                              (let ([i (format "(integer-in ~a ~a)" min max)])
-                                (if false-ok?
-                                    (format "(or/c ~a #f)" i)
-                                    i))
-                              range))))
+      (void)))
   
   (define check-slider-integer (check-bounded-integer (- GAUGE-MAX) GAUGE-MAX #f))
 
@@ -115,28 +95,13 @@
   (define check-gauge-range-integer (check-bounded-integer 0 GAUGE-MAX #f))
 
   (define (check-wheel-step cwho wheel-step)
-    (when (and wheel-step
-	       (not (and (integer? wheel-step)
-			 (exact? wheel-step)
-			 (<= 1 wheel-step 10000))))
-      (raise-argument-error (who->name cwho)
-                            "(or/c #f (integer-in 1 10000))"
-                            wheel-step)))
+    (void))
 
   (define (check-fraction who x)
-    (unless (and (real? x) (<= 0.0 x 1.0))
-      (raise-argument-error (who->name who) 
-                            "(real-in 0.0 1.0)"
-                            x)))
+    (void))
 
   (define (-check-non-negative-integer who i false-ok?)
-    (when (or i (not false-ok?))
-      (unless (and (integer? i) (exact? i) (not (negative? i)))
-	(raise-argument-error (who->name who) 
-                              (if false-ok?
-                                  "(or/c exact-nonnegative-integer? #f)" 
-                                  "exact-nonnegative-integer?")
-                              i))))
+    (void))
 
   (define (check-non-negative-integer who i)
     (-check-non-negative-integer who i #f))
@@ -150,37 +115,19 @@
   (define check-init-position (check-bounded-integer (- WIN-SIZE-MAX) WIN-SIZE-MAX #t))
 
   (define (check-label-string-or-bitmap who label)
-    (unless (or (label-string? label) (is-a? label wx:bitmap%))
-      (raise-argument-error (who->name who)  "(or/c label-string? (is-a?/c bitmap%))" label)))
+    (void))
 
   (define (check-label-string-or-bitmap-or-both who label)
-    (unless (or (label-string? label) (is-a? label wx:bitmap%)
-                (and (list? label) 
-                     (= 3 (length label)) 
-                     (is-a? (car label) wx:bitmap%)
-                     (label-string? (cadr label))
-                     (memq (caddr label) '(left right top bottom))))
-      (raise-argument-error (who->name who) 
-                            (string-append
-                             "(or/c label-string?\n"
-                             "      (is-a?/c bitmap%)\n"
-                             "      (list/c (is-a?/c bitmap%)\n"
-                             "              string\n"
-                             "              (or/c 'left 'right 'top 'bottom)))")
-                            label)))
+    (void))
 
   (define (check-label-string-or-bitmap/false who label)
-    (unless (or (not label) (label-string? label) (is-a? label wx:bitmap%))
-      (raise-argument-error (who->name who) "(or/c label-string? (is-a?/c bitmap%) #f)" label)))
+    (void))
 
   (define (check-label-string/bitmap/iconsym who label)
-    (unless (or (label-string? label) (is-a? label wx:bitmap%)
-		(memq label '(app caution stop)))
-      (raise-argument-error (who->name who) "(or/c label-string? (is-a?/c bitmap%) 'app 'caution 'stop)" label)))
+    (void))
 
   (define (check-font who f)
-    (unless (or (eq? f no-val) (f . is-a? . wx:font%))
-      (raise-argument-error (who->name who) "(is-a?/c font%)" f)))
+    (void))
 
   (define (check-style who reqd other-allowed style)
     (unless (and (list? style) (andmap symbol? style))
