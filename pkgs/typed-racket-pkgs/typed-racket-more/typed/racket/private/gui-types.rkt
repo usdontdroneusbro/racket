@@ -41,6 +41,20 @@
 
 (define-type Bitmap%
   (Class
+   (init-rest (U (List Integer Integer)
+                 (List Integer Integer Any)
+                 (List Integer Integer Any Any)
+                 (List Integer Integer Any Any Real)
+                 (List (U Path-String Input-Port))
+                 (List (U Path-String Input-Port) Any)
+                 (List (U Path-String Input-Port)
+                       Any (Option (Instance Color%)))
+                 (List (U Path-String Input-Port)
+                       Any (Option (Instance Color%)) Any)
+                 (List (U Path-String Input-Port)
+                       Any (Option (Instance Color%)) Any
+                       Real)
+                 (List Bytes Integer Integer)))
    [get-argb-pixels
     (case-> (Real Real
                   Exact-Nonnegative-Integer Exact-Nonnegative-Integer
@@ -374,7 +388,9 @@
 (define-type GL-Context<%>
   (Class [call-as-current
           (case-> ((-> Any) -> Any)
+                  #;
                   ((-> Any) (Evtof Any) -> Any)
+                  #;
                   ((-> Any) (Evtof Any) Any -> Any))]
          ;; FIXME: a typed/ffi binding with Opaque cpointer type
          ;; would be better here
