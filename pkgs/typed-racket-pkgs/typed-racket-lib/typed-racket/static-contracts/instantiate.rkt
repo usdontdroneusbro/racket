@@ -46,7 +46,7 @@
       [(? sc?)
        (sc->constraints sc recur)]))
   (define constraints (recur sc))
-  (validate-constraints (add-constraint constraints max-kind))
+  #;(validate-constraints (add-constraint constraints max-kind))
   constraints)
 
 
