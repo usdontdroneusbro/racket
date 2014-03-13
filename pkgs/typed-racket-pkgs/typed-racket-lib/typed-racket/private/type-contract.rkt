@@ -165,6 +165,8 @@
     (define (fail #:reason [reason #f])
       (call-with-values (λ () (init-fail #:reason reason)) escape))
     (instantiate
+        (type->static-contract ty #:typed-side typed-side fail)
+        #;
       (optimize
         (type->static-contract ty #:typed-side typed-side fail)
         #:trusted-positive typed-side
@@ -190,20 +192,39 @@
 (define (same sc)
   (triple sc sc sc))
 
-;; flat/sc-cache : Hash<Type, Syntax>
-;; This hashtable caches the syntax objects that represent contracts
-;; for flat static contracts. By allocating these syntax objects only once
-;; per type, type equality will match up with flat/sc equality.
-(define flat/sc-cache (make-hash))
+;; sc-cache : Hash<(Pair Integer Symbol), Static-Contract>
+;; This hashtable memoizes the static contracts generated from types.
+;; The table is keyed by a pair of a Type-seq number and a typed-side symbol
+(define sc-cache (make-hash))
 
-;; from-cache : Syntax -> Syntax
-;; Look up the syntax object for a flat/sc in the cache or set it if
-;; it hasn't been cached yet.
-(define (from-cache type stx)
-  (cond [(hash-ref flat/sc-cache type #f)]
-        [else
-         (hash-set! flat/sc-cache type stx)
-         stx]))
+(define bound-names (make-parameter null))
+
+(define (has-names? sc names)
+  (let/ec escape
+    (define (loop sc _)
+      (match sc
+        [(recursive-sc-use name)
+         (when (member name names free-identifier=?)
+           (escape #t))]
+        [_ (sc-traverse sc loop)]))
+    (loop sc #f)
+    #f))
+
+;; A convenience macro for use in type->static-contract below that
+;; helps memoize the static-contract generation.
+(define-syntax (cached-match stx)
+  (syntax-parse stx
+    [(_ type-expr typed-side-expr match-clause ...)
+     #'(let ([type type-expr]
+             [typed-side typed-side-expr])
+         (define key (cons (Type-seq type) typed-side))
+         (cond [(hash-ref sc-cache key #f)]
+               [else
+                (define sc (match type match-clause ...))
+                (unless (has-names? sc (bound-names))
+                  (hash-set! sc-cache key sc))
+                (printf "didn't cache ~a~n" type)
+                sc]))]))
 
 (define (type->static-contract type init-fail #:typed-side [typed-side #t])
   (let/ec return
@@ -217,7 +238,7 @@
         (loop t 'both recursive-values))
       (define (t->sc/method t) (t->sc/function t fail typed-side recursive-values loop #t))
       (define (t->sc/fun t) (t->sc/function t fail typed-side recursive-values loop #f))
-      (match type
+      (cached-match type typed-side
         ;; Applications of implicit recursive type aliases
         ;;
         ;; We special case this rather than just resorting to standard
@@ -232,11 +253,12 @@
                 (define name* (generate-temporary name))
                 (recursive-sc (list name*)
                               (list
-                               (t->sc (resolve-once type)
-                                      #:recursive-values
-                                      (hash-set recursive-values
-                                                (cons name 'app)
-                                                (recursive-sc-use name*))))
+                               (parameterize ([bound-names (cons name (bound-names))])
+                                 (t->sc (resolve-once type)
+                                        #:recursive-values
+                                        (hash-set recursive-values
+                                                  (cons name 'app)
+                                                  (recursive-sc-use name*)))))
                               (recursive-sc-use name*))])]
         ;; Implicit recursive aliases
         [(Name: name-id dep-ids args #f)
@@ -281,19 +303,27 @@
                 ;;                      -> (Listof Static-Contract)
                 (define (resolved-deps->scs typed-side)
                   (for/list ([resolved-dep resolved-deps])
-                    (loop resolved-dep typed-side rv)))
+                    (parameterize ([bound-names
+                                    (append untyped-deps
+                                            typed-deps
+                                            both-deps
+                                            n*s  
+                                            (bound-names))])
+                      (loop resolved-dep typed-side rv))))
 
                 ;; Now actually generate the static contracts
                 (case typed-side
                  [(both) (recursive-sc
                           (append (list both-n*) both-deps)
-                          (cons (loop resolved-name 'both rv)
+                          (cons (parameterize ([bound-names
+                                                (append untyped-deps typed-deps both-deps n*s (bound-names))])
+                                  (loop resolved-name 'both rv))
                                 (resolved-deps->scs 'both))
                           (recursive-sc-use both-n*))]
                  [(typed untyped)
-                  (define untyped (loop resolved-name 'untyped rv))
-                  (define typed (loop resolved-name 'typed rv))
-                  (define both (loop resolved-name 'both rv))
+                  (define untyped (parameterize ([bound-names (append untyped-deps n*s (bound-names))])(loop resolved-name 'untyped rv)))
+                  (define typed (parameterize ([bound-names (append typed-deps n*s (bound-names))])(loop resolved-name 'typed rv)))
+                  (define both (parameterize ([bound-names (append both-deps n*s (bound-names))])(loop resolved-name 'both rv)))
                   (define-values (untyped-dep-scs typed-dep-scs both-dep-scs)
                     (values
                      (resolved-deps->scs 'untyped)
