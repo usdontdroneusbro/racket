@@ -310,10 +310,9 @@
         [(Mu: var (Union: (list (Value: '()) (Pair: elem-ty (F: var)))))
          (listof/sc (t->sc elem-ty))]
         [(Base: sym cnt _ _)
-         (flat/sc (from-cache type #`(flat-named-contract '#,sym (flat-contract-predicate #,cnt)))
-                  sym)]
+         (flat/sc #`(flat-named-contract '#,sym (flat-contract-predicate #,cnt)) sym)]
         [(Refinement: par p?)
-         (and/sc (t->sc par) (flat/sc (from-cache type p?)))]
+         (and/sc (t->sc par) (flat/sc type p?))]
         [(Union: elems)
          (define-values (numeric non-numeric) (partition (λ (t) (equal? 'number (Type-key t))) elems ))
          (define numeric-sc (numeric-type->static-contract (apply Un numeric)))
@@ -331,7 +330,7 @@
         [(Promise: t)
          (promise/sc (t->sc t))]
         [(Opaque: p?)
-         (flat/sc (from-cache type #`(flat-named-contract (quote #,(syntax-e p?)) #,p?)))]
+         (flat/sc #`(flat-named-contract (quote #,(syntax-e p?)) #,p?))]
         [(Continuation-Mark-Keyof: t)
          (continuation-mark-key/sc (t->sc t))]
         ;; TODO: this is not quite right for case->
@@ -458,12 +457,12 @@
                                                 nm (recursive-sc-use nm*)))))
             (recursive-sc (list nm*) (list (struct/sc nm (ormap values mut?) fields))
                                 (recursive-sc-use nm*))]
-           [else (flat/sc (from-cache type #`(flat-named-contract '#,(syntax-e pred?) #,pred?)))])]
+           [else (flat/sc #`(flat-named-contract '#,(syntax-e pred?) #,pred?))])]
         [(Syntax: (Base: 'Symbol _ _ _)) identifier?/sc]
         [(Syntax: t)
          (syntax/sc (t->sc t))]
         [(Value: v)
-         (flat/sc (from-cache type #`(flat-named-contract '#,v (lambda (x) (equal? x '#,v)))) v)]
+         (flat/sc #`(flat-named-contract '#,v (lambda (x) (equal? x '#,v))) v)]
         [(Param: in out) 
          (parameter/sc (t->sc in) (t->sc out))]
         [(Hashtable: k v)
