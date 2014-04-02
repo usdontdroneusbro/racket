@@ -6,7 +6,7 @@
          (for-syntax racket/base))
 
 (provide fx->fl fl->fx
-         fxabs
+         fxabs fxpopcount
          fx+ fx- fx*
          fxquotient fxremainder fxmodulo 
          fxand fxior fxxor

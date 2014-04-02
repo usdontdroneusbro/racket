@@ -42,6 +42,7 @@ static Scheme_Object *fx_div (int argc, Scheme_Object *argv[]);
 static Scheme_Object *fx_rem (int argc, Scheme_Object *argv[]);
 static Scheme_Object *fx_mod (int argc, Scheme_Object *argv[]);
 static Scheme_Object *fx_abs (int argc, Scheme_Object *argv[]);
+static Scheme_Object *fx_popcount (int argc, Scheme_Object *argv[]);
 
 static Scheme_Object *unsafe_fx_plus (int argc, Scheme_Object *argv[]);
 static Scheme_Object *unsafe_fx_minus (int argc, Scheme_Object *argv[]);
@@ -183,6 +184,11 @@ void scheme_init_flfxnum_numarith(Scheme_Env *env)
   SCHEME_PRIM_PROC_FLAGS(p) |= scheme_intern_prim_opt_flags(SCHEME_PRIM_IS_UNARY_INLINED)
                                                             | SCHEME_PRIM_PRODUCES_FIXNUM;
   scheme_add_global_constant("fxabs", p, env);
+
+  p = scheme_make_folding_prim(fx_popcount, "fxpopcount", 1, 1, 1);
+  SCHEME_PRIM_PROC_FLAGS(p) |= scheme_intern_prim_opt_flags(SCHEME_PRIM_IS_UNARY_INLINED)
+                                                            | SCHEME_PRIM_PRODUCES_FIXNUM;
+  scheme_add_global_constant("fxpopcount", p, env);
 
   p = scheme_make_folding_prim(fl_plus, "fl+", 2, 2, 1);
   if (scheme_can_inline_fp_op())
@@ -1171,6 +1177,17 @@ static Scheme_Object *fx_abs(int argc, Scheme_Object *argv[])
   if (!SCHEME_INTP(argv[0])) scheme_wrong_contract("fxabs", "fixnum?", 0, argc, argv);
   o = scheme_abs(argc, argv);
   if (!SCHEME_INTP(o)) scheme_non_fixnum_result("fxabs", o);
+  return o;
+}
+
+static Scheme_Object *fx_popcount(int argc, Scheme_Object *argv[])
+{
+  Scheme_Object *o;
+  Scheme_Object *arg = argv[0];
+  if (!SCHEME_INTP(arg)) scheme_wrong_contract("fxpopcount", "fixnum?", 0, argc, argv);
+  /* __builtin_popcount for int, popcountl for long, popcountll for long long */
+  o = scheme_make_integer(__builtin_popcountll(SCHEME_INT_VAL(arg)));
+  if (!SCHEME_INTP(o)) scheme_non_fixnum_result("fxpopcount", o);
   return o;
 }
 

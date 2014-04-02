@@ -232,5 +232,12 @@
 (err/rt-test (for/fxvector #:length 5 #:fill 0.0 ([i 5]) 8))
 (err/rt-test (for/fxvector #:length 10 #:fill 0.0 ([i 5]) 8))
 
+;; ----------------------------------------
+;; Tests for fxpopcount
+(test 0 fxpopcount 0)
+(test 5 fxpopcount #x1111100)
+(test 5 fxpopcount #x1101011)
+(test 10 fxpopcount #x11010111101101000)
+
 
 (report-errs)
