@@ -1,5 +1,6 @@
 #lang racket/base
-(require racket/unsafe/ops
+(require racket/fixnum
+         racket/unsafe/ops
          (for-syntax racket/base racket/fixnum))
 (provide fxpopcount
          unsafe-fxpopcount*)
@@ -54,4 +55,5 @@
                                       (unsafe-fxand n #,f))])
              n)))]))
 
+#;
 (define-fxpopcount fxpopcount #f)
