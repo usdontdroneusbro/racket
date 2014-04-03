@@ -186,8 +186,8 @@ void scheme_init_flfxnum_numarith(Scheme_Env *env)
   scheme_add_global_constant("fxabs", p, env);
 
   p = scheme_make_folding_prim(fx_popcount, "fxpopcount", 1, 1, 1);
-  SCHEME_PRIM_PROC_FLAGS(p) |= scheme_intern_prim_opt_flags(SCHEME_PRIM_IS_UNARY_INLINED)
-                                                            | SCHEME_PRIM_PRODUCES_FIXNUM;
+  SCHEME_PRIM_PROC_FLAGS(p) |= scheme_intern_prim_opt_flags(SCHEME_PRIM_IS_UNARY_INLINED
+                                                            | SCHEME_PRIM_PRODUCES_FIXNUM);
   scheme_add_global_constant("fxpopcount", p, env);
 
   p = scheme_make_folding_prim(fl_plus, "fl+", 2, 2, 1);

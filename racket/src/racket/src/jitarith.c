@@ -1132,6 +1132,8 @@ int scheme_generate_arith_for(mz_jit_state *jitter, Scheme_Object *rator, Scheme
         arith = 13 -> sqrt
         arith = 14 -> unary floating-point op (consult `rator')
         arith = 15 -> inexact->exact
+        arith = 16 -> expt
+        arith = 17 -> popcount
         cmp = 0 -> = or zero?
         cmp = +/-1 -> >=/<=
         cmp = +/-2 -> >/< or positive/negative?
@@ -1928,6 +1930,28 @@ int scheme_generate_arith_for(mz_jit_state *jitter, Scheme_Object *rator, Scheme
               /* inexact->exact */
               /* no work to do, since fixnum is already exact */
               jit_movr_p(dest, JIT_R0);
+            } else if (arith == ARITH_POPCOUNT) {
+              /* popcount */
+              jit_rshi_l(JIT_R0, JIT_R0, 1); /* shift off tag bit */
+              jit_rshi_l(JIT_R2, JIT_R0, 1);
+              jit_andi_ul(JIT_R2, JIT_R2, 0x5555555555555555ULL);
+              jit_subr_ul(JIT_R0, JIT_R0, JIT_R2);
+              jit_andi_ul(JIT_R2, JIT_R0, 0x3333333333333333ULL);
+              jit_rshi_l(JIT_V1, JIT_R0, 2);
+              jit_andi_ul(JIT_V1, JIT_V1, 0x3333333333333333ULL);
+              jit_addr_ul(JIT_R0, JIT_R2, JIT_V1);
+              jit_rshi_l(JIT_R2, JIT_R0, 4);
+              jit_addr_ul(JIT_R2, JIT_R2, JIT_R0);
+              jit_andi_ul(JIT_R0, JIT_R2, 0x0f0f0f0f0f0f0f0fULL);
+              jit_rshi_l(JIT_R2, JIT_R0, 8);
+              jit_addr_ul(JIT_R0, JIT_R0, JIT_R2);
+              jit_rshi_l(JIT_R2, JIT_R0, 16);
+              jit_addr_ul(JIT_R0, JIT_R0, JIT_R2);
+              jit_rshi_l(JIT_R2, JIT_R0, 32);
+              jit_addr_ul(JIT_R0, JIT_R0, JIT_R2);
+              jit_andi_ul(JIT_R0, JIT_R0, 0x7f);
+              jit_lshi_l(JIT_R0, JIT_R0, 1); /* shift for tag bit */
+              jit_ori_ul(dest, JIT_R0, 0x1); /* tag bit */
             }
           }
         }

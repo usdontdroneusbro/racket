@@ -1828,6 +1828,9 @@ int scheme_generate_inlined_unary(mz_jit_state *jitter, Scheme_App2_Rec *app, in
     } else if (IS_NAMED_PRIM(rator, "fxnot")) {
       scheme_generate_arith(jitter, rator, app->rand, NULL, 1, ARITH_NOT, 0, 9, NULL, 1, -1, 0, NULL, dest);
       return 1;
+    } else if (IS_NAMED_PRIM(rator, "fxpopcount")) {
+      scheme_generate_arith(jitter, rator, app->rand, NULL, 1, ARITH_POPCOUNT, 0, 0, NULL, 1, -1, 0, NULL, dest);
+      return 1;
     } else if (IS_NAMED_PRIM(rator, "vector-immutable")
                || IS_NAMED_PRIM(rator, "vector")) {
       return generate_vector_alloc(jitter, rator, NULL, app, NULL, dest);

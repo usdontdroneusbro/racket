@@ -1618,6 +1618,8 @@ Scheme_Object *scheme_jit_continuation_apply_install(Apply_LWC_Args *args);
 #define ARITH_INEX_EX  15
 /*  flexpt */
 #define ARITH_EXPT     16
+/*  popcount */
+#define ARITH_POPCOUNT 17
 
 /* Comparison codes. Used in jitarith.c and jitinline.c. */
 
