@@ -30,7 +30,11 @@
 ;;
 ;; Data definitions for aliases
 ;;
-;; A TypeAliasInfo is a (list Syntax (Listof Identifier) Identifier)
+;; A TypeAliasInfo is a (list Syntax (Listof Id) (list Id Id Id))
+;;
+;; interp. - the syntax representing the type to be aliased
+;;         - the list of type argument identifiers
+;;         - three identifiers that are bound to contracts at runtime
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 

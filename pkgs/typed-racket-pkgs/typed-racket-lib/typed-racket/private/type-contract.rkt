@@ -314,11 +314,13 @@
              [(typed) ctc-t]
              [(both) ctc-u]
              [(untyped) ctc-b]))
-         ;; FIXME: not sure if always chaperone is correct
+         ;; FIXME: More precision here would be good so that contracts are
+         ;;        valid in more cases. In some cases, we can be more precise
+         ;;        than impersonator even if it's sound to assume that.
          (define alias-failed? (free-id-table-ref failed-aliases ctc-id #f))
          (if alias-failed?
              (fail #:reason alias-failed?)
-             (chaperone/sc ctc-id))]
+             (impersonator/sc ctc-id))]
         ;; Ordinary type applications or struct type names, just resolve
         [(or (App: _ _ _) (Name: _ _ _ _ #t)) (t->sc (resolve-once type))]
         [(Univ:) (if (from-typed? typed-side) any-wrap/sc any/sc)]
