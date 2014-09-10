@@ -27,10 +27,12 @@
          contract-first-order-passes?
          
          prop:contracted prop:blame
+         prop:contract-original
          impersonator-prop:contracted impersonator-prop:blame
+         impersonator-prop:contract-original
          has-contract? value-contract
          has-blame? value-blame
-         
+
          ;; for opters
          check-flat-contract
          check-flat-named-contract
@@ -59,62 +61,6 @@
   (write-string "contract: " port)
   (write-string (format "~.s" (contract-struct-name stct)) port)
   (write-string ">" port))
-
-(define (has-contract? v)
-  (or (has-prop:contracted? v)
-      (has-impersonator-prop:contracted? v)))
-
-(define (value-contract v)
-  (cond
-    [(has-prop:contracted? v)
-     (get-prop:contracted v)]
-    [(has-impersonator-prop:contracted? v)
-     (get-impersonator-prop:contracted v)]
-    [else #f]))
-
-(define (has-blame? v)
-  (or (has-prop:blame? v)
-      (has-impersonator-prop:blame? v)))
-
-(define (value-blame v)
-  (cond
-    [(has-prop:blame? v)
-     (get-prop:blame v)]
-    [(has-impersonator-prop:blame? v)
-     (get-impersonator-prop:blame v)]
-    [else #f]))
-
-(define-values (prop:contracted has-prop:contracted? get-prop:contracted)
-  (let-values ([(prop pred get)
-                (make-struct-type-property
-                 'prop:contracted
-                 (lambda (v si)
-                   (if (number? v)
-                       (let ([ref (cadddr si)])
-                         (lambda (s) (ref s v)))
-                       (lambda (s) v))))])
-    (values prop pred (λ (v) ((get v) v)))))
-
-(define-values (prop:blame has-prop:blame? get-prop:blame)
-  (let-values ([(prop pred get)
-                (make-struct-type-property
-                 'prop:blame
-                 (lambda (v si)
-                   (if (number? v)
-                       (let ([ref (cadddr si)])
-                         (lambda (s) (ref s v)))
-                       (lambda (s) v))))])
-    (values prop pred (λ (v) ((get v) v)))))
-
-(define-values (impersonator-prop:contracted 
-                has-impersonator-prop:contracted? 
-                get-impersonator-prop:contracted)
-  (make-impersonator-property 'impersonator-prop:contracted))
-
-(define-values (impersonator-prop:blame
-                has-impersonator-prop:blame? 
-                get-impersonator-prop:blame)
-  (make-impersonator-property 'impersonator-prop:blame))
 
 (define (contract-first-order c)
   (contract-struct-first-order

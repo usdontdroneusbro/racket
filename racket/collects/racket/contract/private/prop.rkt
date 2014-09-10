@@ -42,7 +42,14 @@
          
          prop:orc-contract
          prop:orc-contract?
-         prop:orc-contract-get-subcontracts)
+         prop:orc-contract-get-subcontracts
+
+         prop:contracted prop:blame
+         prop:contract-original
+         impersonator-prop:contracted impersonator-prop:blame
+         impersonator-prop:contract-original
+         has-contract? value-contract
+         has-blame? value-blame)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -255,9 +262,137 @@
         get-val-first-projection 
         list-contract?)))
 
+(define (has-contract? v)
+  (or (and (has-prop:contracted? v)
+           (get-prop:contracted v))
+      (and (has-impersonator-prop:contracted? v)
+           (get-impersonator-prop:contracted v))))
+
+(define (value-contract v)
+  (cond
+    [(has-prop:contracted? v)
+     (get-prop:contracted v)]
+    [(has-impersonator-prop:contracted? v)
+     (get-impersonator-prop:contracted v)]
+    [else #f]))
+
+(define (has-blame? v)
+  (or (and (has-prop:blame? v)
+           (get-prop:blame v))
+      (and (has-impersonator-prop:blame? v)
+           (get-impersonator-prop:blame v))))
+
+(define (value-blame v)
+  (cond
+    [(has-prop:blame? v)
+     (get-prop:blame v)]
+    [(has-impersonator-prop:blame? v)
+     (get-impersonator-prop:blame v)]
+    [else #f]))
+
+(define-values (prop:contracted has-prop:contracted? get-prop:contracted)
+  (let-values ([(prop pred get)
+                (make-struct-type-property
+                 'prop:contracted
+                 (lambda (v si)
+                   (if (number? v)
+                       (let ([ref (cadddr si)])
+                         (lambda (s) (ref s v)))
+                       (lambda (s) v))))])
+    (values prop pred (λ (v) ((get v) v)))))
+
+(define-values (prop:blame has-prop:blame? get-prop:blame)
+  (let-values ([(prop pred get)
+                (make-struct-type-property
+                 'prop:blame
+                 (lambda (v si)
+                   (if (number? v)
+                       (let ([ref (cadddr si)])
+                         (lambda (s) (ref s v)))
+                       (lambda (s) v))))])
+    (values prop pred (λ (v) ((get v) v)))))
+
+(define-values (impersonator-prop:contracted
+                has-impersonator-prop:contracted?
+                get-impersonator-prop:contracted)
+  (make-impersonator-property 'impersonator-prop:contracted))
+
+(define-values (impersonator-prop:blame
+                has-impersonator-prop:blame?
+                get-impersonator-prop:blame)
+  (make-impersonator-property 'impersonator-prop:blame))
+
+;; Properties that let you attach the original unwrapped value
+;; used for projection wrappers below
+(define-values (prop:contract-original
+                has-prop:contract-original?
+                get-prop:contract-original)
+  (let-values ([(prop pred get)
+                (make-struct-type-property
+                 'prop:contract-original
+                 (lambda (v si)
+                   (if (number? v)
+                       (let ([ref (cadddr si)])
+                         (lambda (s) (ref s v)))
+                       (lambda (s) v))))])
+    (values prop pred (λ (v) ((get v) v)))))
+
+(define-values (impersonator-prop:contract-original
+                has-impersonator-prop:contract-original?
+                get-impersonator-prop:contract-original)
+  (make-impersonator-property 'impersonator-prop:contract-original))
+
+(define (get-contract-original val)
+  (cond [(has-prop:contract-original? val)
+         (get-prop:contract-original val)]
+        [(has-impersonator-prop:contract-original? val)
+         (get-impersonator-prop:contract-original val)]
+        [else #f]))
+
+(define-syntax-rule (maybe-optimize-projection f c b v body)
+  (cond [;; Optimize the case when a weaker contract with
+         ;; the same blame labels are applied
+         (and (has-contract? v)
+              (contract-struct-stronger? c (value-contract v))
+              (equal? (blame-positive (value-blame v))
+                      (blame-positive b))
+              (equal? (blame-negative (value-blame v))
+                      (blame-negative b)))
+         v]
+        [;; Optimize the case when a weaker contract with
+         ;; flipped blame labels are applied by replacing the
+         ;; blame labels on the existing contract.
+         ;; Note that this violates the chaperone property so
+         ;; we can only apply it on impersonators.
+         (and (not (chaperone-contract-struct? c))
+              (has-contract? v)
+              (contract-struct-stronger? c (value-contract v))
+              (equal? (blame-positive (value-blame v))
+                      (blame-negative b))
+              (equal? (blame-negative (value-blame v))
+                      (blame-positive b))
+              (get-contract-original v))
+         =>
+         (λ (orig)
+           (((contract-struct-projection (value-contract v))
+             (blame-replace-negative (value-blame v) (blame-negative b)))
+            orig))]
+        [else body]))
+
+(define (impersonator-projection-wrapper f)
+  (λ (c)
+    (let ([proj (f c)])
+      (λ (b)
+        (let ([p (proj b)])
+          (λ (v)
+            (maybe-optimize-projection
+             f c b v
+             (p v))))))))
+
 (define build-contract-property
   (procedure-rename
-   (build-property make-contract-property 'anonymous-contract values)
+   (build-property make-contract-property 'anonymous-contract
+                   impersonator-projection-wrapper)
    'build-contract-property))
 
 ;; Here we'll force the projection to always return the original value,
@@ -282,10 +417,12 @@
       (λ (b)
         (let ([p (proj b)])
           (λ (v)
-            (let ([v* (p v)])
-              (unless (chaperone-of? v* v)
-                (error 'prop:chaperone-contract (format "expected a chaperone of ~v, got ~v" v v*)))
-              v*)))))))
+            (maybe-optimize-projection
+             f c b v
+             (let ([v* (p v)])
+               (unless (chaperone-of? v* v)
+                 (error 'prop:chaperone-contract (format "expected a chaperone of ~v, got ~v" v v*)))
+               v*))))))))
 
 (define (blame-context-projection-wrapper proj)
   (λ (ctc)
