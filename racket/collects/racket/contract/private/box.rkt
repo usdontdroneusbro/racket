@@ -157,7 +157,7 @@
   (build-chaperone-contract-property
    #:name box/c-name
    #:first-order box/c-first-order
-   #:val-first-projection #f #;(ho-val-first-projection chaperone-box)
+   #:val-first-projection (ho-val-first-projection chaperone-box)
    ;; FIXME: ok???
    #:stronger (lambda (this that) (contract-stronger? (base-box/c-content this) (base-box/c-content that)))
    #:projection (ho-projection chaperone-box)))
@@ -168,7 +168,7 @@
   (build-contract-property
    #:name box/c-name
    #:first-order box/c-first-order
-   #:val-first-projection #f #;(ho-val-first-projection impersonate-box)
+   #:val-first-projection (ho-val-first-projection impersonate-box)
    ;; FIXME: ok???
    #:stronger (lambda (this that) (contract-stronger? (base-box/c-content this) (base-box/c-content that)))
    #:projection (ho-projection impersonate-box)))
