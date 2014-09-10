@@ -221,7 +221,7 @@
 
 (define skip-projection-wrapper? (make-parameter #f))
 
-(define ((build-property mk default-name projection-wrapper)
+(define ((build-property mk default-name projection-wrapper val-first-projection-wrapper)
          #:name [get-name #f]
          #:first-order [get-first-order #f]
          #:projection [get-projection #f]
@@ -243,11 +243,9 @@
          [get-first-order (or get-first-order get-any?)]
          [get-val-first-projection
           (or (and get-val-first-projection
-                   ;; FIXME: not sure if this is right
-                   #;
                    (if (skip-projection-wrapper?)
                        get-val-first-projection
-                       (projection-wrapper get-val-first-projection)))
+                       (val-first-projection-wrapper get-val-first-projection)))
               (and (not get-projection)
                    (get-val-first-first-order-projection get-name get-first-order)))]
          [get-projection
@@ -389,17 +387,32 @@
 (define (impersonator-projection-wrapper f)
   (λ (c)
     (let ([proj (f c)])
-      (λ (b)
-        (let ([p (proj b)])
-          (λ (v)
-            (maybe-optimize-projection
-             f c b v
-             (p v))))))))
+      (and proj ; for wrapping val-first-projection
+           (λ (b)
+             (let ([p (proj b)])
+               (λ (v)
+                 (maybe-optimize-projection
+                  f c b v
+                  (p v)))))))))
+
+(define (impersonator-val-first-projection-wrapper f)
+  (λ (c)
+    (let ([proj (f c)])
+      (and proj ; make sure there is a val-first-projection
+           (λ (b)
+             (let ([p (proj b)])
+               (λ (v)
+                 (let ([p (p v)])
+                   (λ (neg-party)
+                     (maybe-optimize-projection
+                      f c (blame-add-missing-party b neg-party) v
+                      (p neg-party)))))))))))
 
 (define build-contract-property
   (procedure-rename
    (build-property make-contract-property 'anonymous-contract
-                   impersonator-projection-wrapper)
+                   impersonator-projection-wrapper
+                   impersonator-val-first-projection-wrapper)
    'build-contract-property))
 
 ;; Here we'll force the projection to always return the original value,
@@ -407,15 +420,17 @@
 (define (flat-projection-wrapper f)
   (λ (c)
     (let ([proj (f c)])
-      (λ (b)
-        (let ([p (proj b)])
-          (λ (v) (p v) v))))))
+      (and proj ; see impersonator case
+           (λ (b)
+             (let ([p (proj b)])
+               (λ (v) (p v) v)))))))
 
 (define build-flat-contract-property
   (procedure-rename
    (build-property (compose make-flat-contract-property make-contract-property)
                    'anonymous-flat-contract
-                   flat-projection-wrapper)
+                   flat-projection-wrapper
+                   values)
    'build-flat-contract-property))
 
 (define (chaperone-projection-wrapper f)
@@ -431,6 +446,19 @@
                  (error 'prop:chaperone-contract (format "expected a chaperone of ~v, got ~v" v v*)))
                v*))))))))
 
+(define (chaperone-val-first-projection-wrapper f)
+  (λ (c)
+    (let ([proj (f c)])
+      (and proj ; see impersonator case
+           (λ (b)
+             (let ([p (proj b)])
+               (λ (v)
+                 (let ([p (p v)])
+                   (λ (neg-party)
+                     (maybe-optimize-projection
+                      f c (blame-add-missing-party b neg-party) v
+                      (p neg-party)))))))))))
+
 (define (blame-context-projection-wrapper proj)
   (λ (ctc)
     (define c-proj (proj ctc))
@@ -441,7 +469,8 @@
   (procedure-rename
    (build-property (compose make-chaperone-contract-property make-contract-property)
                    'anonymous-chaperone-contract
-                   chaperone-projection-wrapper)
+                   chaperone-projection-wrapper
+                   chaperone-val-first-projection-wrapper)
    'build-chaperone-contract-property))
 
 (define (get-any? c) any?)
