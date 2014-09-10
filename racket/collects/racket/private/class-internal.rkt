@@ -2042,9 +2042,9 @@
                       
                       no-super-init?); #t => no super-init needed
   #:inspector insp
-  #:property prop:contracted (struct-field-index class-contract)
-  #:property prop:blame (struct-field-index class-blame)
-  #:property prop:contract-original (struct-field-index class-orig-cls))
+  #:property prop:contracted (struct-field-index contract)
+  #:property prop:blame (struct-field-index blame)
+  #:property prop:contract-original (struct-field-index orig-cls))
 
 #|
 
@@ -2341,6 +2341,7 @@ last few projections.
                                 init-args
                                 init-mode
                                 'init
+                                #f #f
                                 #f #f #f ; serializer is set later
                                 (or check-undef? (class-check-undef? super))
                                 (and make-struct:prim #t))]
@@ -3145,7 +3146,7 @@ An example
                      (unused-args-error this args))
                    (void))
                  
-                 #f
+                 #f #f #f
                  (lambda (obj) #(()))        ; serialize
                  (lambda (obj args) (void))  ; deserialize-fixup
 
@@ -3308,6 +3309,7 @@ An example
                                (class-init cls)
 
                                (class-orig-cls cls)
+                               #f #f
                                #f #f    ; serializer is never set
 
                                (class-check-undef? cls)
