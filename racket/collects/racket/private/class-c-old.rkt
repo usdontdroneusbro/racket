@@ -247,6 +247,7 @@
                             #f
                             
                             (class-orig-cls cls)
+                            ctc blame
                             #f #f ; serializer is never set
                             
                             (class-check-undef? cls)
@@ -514,6 +515,7 @@
                             #f
                             
                             (class-orig-cls cls)
+                            internal-ctc blame
                             #f #f ; serializer is never set
 
                             (class-check-undef? cls)
@@ -819,6 +821,20 @@
      (list (cons 'absent meths))]
     [else
      (list `(absent ,@meths (field ,@fields)))]))
+
+(define (class/c-stronger? this that)
+  ;; FIXME: ignore fields for now
+  (and (class/c? that)
+       (let ()
+         (define that-mapping
+           (map cons
+                (class/c-methods this)
+                (class/c-method-contracts that)))
+         (for/and ([m (in-list (class/c-methods this))]
+                   [m-ctc (in-list (class/c-method-contracts this))])
+           (define maybe-ctc (assoc m that-mapping))
+           (or (not maybe-ctc)
+               (contract-stronger? m-ctc (cdr maybe-ctc)))))))
              
 (define-struct class/c 
   (methods method-contracts fields field-contracts inits init-contracts
@@ -829,6 +845,7 @@
   (build-contract-property
    #:projection class/c-proj
    #:name build-class/c-name
+   #:stronger class/c-stronger?
    #:first-order
    (λ (ctc)
      (λ (cls)
@@ -1117,6 +1134,18 @@
                              (base-object/c-fields ctc)
                              (λ args (ret #f))))))
 
+(define (object/c-stronger? this that)
+  (define that-mapping
+    (map cons
+         (base-object/c-methods that)
+         (base-object/c-method-contracts that)))
+  ;; FIXME: ignore fields for now
+  (and (for/and ([m (in-list (base-object/c-methods this))]
+                 [m-ctc (in-list (base-object/c-method-contracts this))])
+         (define maybe-ctc (assoc m that-mapping))
+         (or (not maybe-ctc)
+             (contract-stronger? m-ctc (cdr maybe-ctc))))))
+
 (define-struct base-object/c (methods method-contracts fields field-contracts)
   #:property prop:contract
   (build-contract-property 
@@ -1140,6 +1169,7 @@
                (handle-optional 'field 
                                 (base-object/c-fields ctc)
                                 (base-object/c-field-contracts ctc))))))
+   #:stronger object/c-stronger?
    #:first-order object/c-first-order))
 
 (define-syntax (object/c stx)
@@ -1179,6 +1209,9 @@
         [else
          (impersonate-struct val object-ref (λ (o c) new-cls)
                              impersonator-prop:contracted ctc
+                             impersonator-prop:blame blame
+                             ;; FIXME
+                             impersonator-prop:contract-original original-obj
                              impersonator-prop:original-object original-obj)]))))
 
 (define (instanceof/c-first-order ctc)
@@ -1187,6 +1220,13 @@
       (and (object? val)
            (contract-first-order-passes? cls-ctc (object-ref val))))))
 
+(define (instanceof/c-stronger? this that)
+  (and (base-instanceof/c? that)
+       (let ()
+        (define this-class/c (base-instanceof/c-class-ctc this))
+        (define that-class/c (base-instanceof/c-class-ctc that))
+        (contract-stronger? this-class/c that-class/c))))
+
 (define-struct base-instanceof/c (class-ctc)
   #:property prop:contract
   (build-contract-property 
@@ -1194,6 +1234,7 @@
    #:name
    (λ (ctc)
      (build-compound-type-name 'instanceof/c (base-instanceof/c-class-ctc ctc)))
+   #:stronger instanceof/c-stronger?
    #:first-order instanceof/c-first-order))
 
 (define (instanceof/c cctc)
@@ -1211,6 +1252,9 @@
                                      methods method-contracts fields field-contracts)])
     (impersonate-struct obj object-ref (λ (o c) new-cls) ;; TODO: object-ref audit
                         impersonator-prop:contracted ctc
+                        impersonator-prop:blame blame
+                        ;; FIXME: this duplication is silly
+                        impersonator-prop:contract-original original-obj
                         impersonator-prop:original-object original-obj)))
 
 
@@ -1266,6 +1310,7 @@
                         (class-init cls)
                         
                         (class-orig-cls cls)
+                        #f #f
                         #f #f ; serializer is never set
 
                         (class-check-undef? cls)

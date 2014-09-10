@@ -2029,6 +2029,10 @@
                       
                       [orig-cls      ; uncontracted version of this class (or same class)
                        #:mutable]
+                      contract       ; contract that was applied to the class,
+                                     ; #f => not a contract class wrapper
+                      blame          ; blame object applied to the class
+                                     ; #f => not a contract class wrapper
                       [serializer    ; proc => serializer, #f => not serializable
                        #:mutable]
                       [fixup         ; for deserialization
@@ -2037,7 +2041,10 @@
                       check-undef?   ; objects need an unsafe-undefined guarding chaperone?
                       
                       no-super-init?); #t => no super-init needed
-  #:inspector insp)
+  #:inspector insp
+  #:property prop:contracted (struct-field-index class-contract)
+  #:property prop:blame (struct-field-index class-blame)
+  #:property prop:contract-original (struct-field-index class-orig-cls))
 
 #|
 
