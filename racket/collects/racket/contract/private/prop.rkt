@@ -269,9 +269,11 @@
 
 (define (has-contract? v)
   (or (and (has-prop:contracted? v)
-           (get-prop:contracted v))
+           (get-prop:contracted v)
+           #t)
       (and (has-impersonator-prop:contracted? v)
-           (get-impersonator-prop:contracted v))))
+           (get-impersonator-prop:contracted v)
+           #t)))
 
 (define (value-contract v)
   (cond
