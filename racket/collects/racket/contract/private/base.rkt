@@ -175,9 +175,12 @@
          ((f blame-known) val)))]))
   
 (define (recursive-contract-stronger this that)
-  (and (recursive-contract? that)
-       (procedure-closure-contents-eq? (recursive-contract-thunk this)
-                                       (recursive-contract-thunk that))))
+  (or (and (recursive-contract? that)
+           (procedure-closure-contents-eq? (recursive-contract-thunk this)
+                                           (recursive-contract-thunk that)))
+      (and (recursive-contract-ctc this)
+           (not (symbol? (recursive-contract-ctc this)))
+           (contract-stronger? (recursive-contract-ctc this) that))))
 
 (define ((recursive-contract-first-order ctc) val)
   (contract-first-order-passes? (force-recursive-contract ctc)

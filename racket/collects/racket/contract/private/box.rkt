@@ -126,7 +126,8 @@
                              (λ (b v) (pos-elem-proj v))
                              (λ (b v) (neg-elem-proj v))
                              impersonator-prop:contracted ctc
-                             impersonator-prop:blame blame))))))))
+                             impersonator-prop:blame blame
+                             impersonator-prop:contract-original val))))))))
 
 (define (ho-val-first-projection chaperone/impersonate-box)
   (λ (ctc)
@@ -147,7 +148,8 @@
                    (λ (b v) ((pos-elem-proj v) neg-party))
                    (λ (b v) ((neg-elem-proj v) neg-party))
                    impersonator-prop:contracted ctc
-                   impersonator-prop:blame (blame-add-missing-party blame neg-party)))))))))
+                   impersonator-prop:blame (blame-add-missing-party blame neg-party)
+                   impersonator-prop:contract-original val))))))))
 
 (define-struct (chaperone-box/c base-box/c) ()
   #:property prop:custom-write custom-write-property-proc
@@ -155,7 +157,9 @@
   (build-chaperone-contract-property
    #:name box/c-name
    #:first-order box/c-first-order
-   #:val-first-projection (ho-val-first-projection chaperone-box)
+   #:val-first-projection #f #;(ho-val-first-projection chaperone-box)
+   ;; FIXME: ok???
+   #:stronger (lambda (this that) (contract-stronger? (base-box/c-content this) (base-box/c-content that)))
    #:projection (ho-projection chaperone-box)))
 
 (define-struct (impersonator-box/c base-box/c) ()
@@ -164,7 +168,9 @@
   (build-contract-property
    #:name box/c-name
    #:first-order box/c-first-order
-   #:val-first-projection (ho-val-first-projection impersonate-box)
+   #:val-first-projection #f #;(ho-val-first-projection impersonate-box)
+   ;; FIXME: ok???
+   #:stronger (lambda (this that) (contract-stronger? (base-box/c-content this) (base-box/c-content that)))
    #:projection (ho-projection impersonate-box)))
 
 (define-syntax (wrap-box/c stx)
