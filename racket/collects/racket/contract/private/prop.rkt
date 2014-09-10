@@ -242,7 +242,12 @@
   (let* ([get-name (or get-name (lambda (c) default-name))]
          [get-first-order (or get-first-order get-any?)]
          [get-val-first-projection
-          (or get-val-first-projection 
+          (or (and get-val-first-projection
+                   ;; FIXME: not sure if this is right
+                   #;
+                   (if (skip-projection-wrapper?)
+                       get-val-first-projection
+                       (projection-wrapper get-val-first-projection)))
               (and (not get-projection)
                    (get-val-first-first-order-projection get-name get-first-order)))]
          [get-projection
