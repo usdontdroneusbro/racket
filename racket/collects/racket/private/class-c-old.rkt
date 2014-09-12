@@ -1135,16 +1135,18 @@
                              (λ args (ret #f))))))
 
 (define (object/c-stronger? this that)
-  (define that-mapping
-    (map cons
-         (base-object/c-methods that)
-         (base-object/c-method-contracts that)))
-  ;; FIXME: ignore fields for now
-  (and (for/and ([m (in-list (base-object/c-methods this))]
-                 [m-ctc (in-list (base-object/c-method-contracts this))])
-         (define maybe-ctc (assoc m that-mapping))
-         (or (not maybe-ctc)
-             (contract-stronger? m-ctc (cdr maybe-ctc))))))
+  (and (base-object/c? that)
+       (let ()
+         ;; FIXME: ignore fields for now
+         (define that-mapping
+           (map cons
+                (base-object/c-methods that)
+                (base-object/c-method-contracts that)))
+         (for/and ([m (in-list (base-object/c-methods this))]
+                   [m-ctc (in-list (base-object/c-method-contracts this))])
+           (define maybe-ctc (assoc m that-mapping))
+           (or (not maybe-ctc)
+               (contract-stronger? m-ctc (cdr maybe-ctc)))))))
 
 (define-struct base-object/c (methods method-contracts fields field-contracts)
   #:property prop:contract
