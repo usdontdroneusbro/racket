@@ -11,6 +11,7 @@
          contract-struct-projection
          contract-struct-val-first-projection
          contract-struct-stronger?
+         contract-struct-weaker?
          contract-struct-generate
          contract-struct-exercise
          contract-struct-list-contract?
@@ -61,6 +62,7 @@
                                    first-order
                                    projection
                                    stronger
+                                   weaker
                                    generate
                                    exercise
                                    val-first-projection
@@ -104,17 +106,39 @@
   (and get-projection 
        (get-projection c)))
 
+(define current-seen (make-parameter #f))
+
 (define (contract-struct-stronger? a b)
   (define prop (contract-struct-property a))
   (define stronger? (contract-property-stronger prop))
+  (define seen (or (current-seen) (hash)))
   (let loop ([b b])
     (cond
       [(stronger? a b) #t]
-      [(prop:orc-contract? b)
+      [(and (not (prop:orc-contract? a)) (prop:orc-contract? b))
        (define sub-contracts ((prop:orc-contract-get-subcontracts b) b))
        (for/or ([sub-contract (in-list sub-contracts)])
          (loop sub-contract))]
-      [else #f])))
+      [(hash-ref seen (list b a) #f) => not]
+      [else
+       (parameterize ([current-seen (hash-set seen (list a b) #t)])
+         (contract-struct-weaker? b a))])))
+
+(define (contract-struct-weaker? a b)
+  (define prop (contract-struct-property a))
+  (define weaker? (contract-property-weaker prop))
+  (define seen (or (current-seen) (hash)))
+  (let loop ([b b])
+    (cond
+      [(weaker? a b) #t]
+      [(and (not (prop:orc-contract? a)) (prop:orc-contract? b))
+       (define sub-contracts ((prop:orc-contract-get-subcontracts b) b))
+       (for/and ([sub-contract (in-list sub-contracts)])
+         (loop sub-contract))]
+      [(hash-ref seen (list b a) #f) => not]
+      [else
+       (parameterize ([current-seen (hash-set seen (list a b) #t)])
+         (contract-struct-stronger? b a))])))
 
 (define (contract-struct-generate c)
   (define prop (contract-struct-property c))
@@ -227,6 +251,7 @@
          #:projection [get-projection #f]
          #:val-first-projection [get-val-first-projection #f]
          #:stronger [stronger #f]
+         #:weaker [weaker #f]
          #:generate [generate (λ (ctc) (λ (fuel) #f))]
          #:exercise [exercise (λ (ctc) (λ (fuel) (values void '())))]
          #:list-contract? [list-contract? (λ (c) #f)])
@@ -257,10 +282,11 @@
                   (projection-wrapper get-projection)))]
             [else (get-first-order-projection
                    get-name get-first-order)])]
-         [stronger (or stronger weakest)])
+         [stronger (or stronger weakest)]
+         [weaker (or weaker strongest)])
 
     (mk get-name get-first-order
-        get-projection stronger 
+        get-projection stronger weaker
         generate exercise 
         get-val-first-projection 
         list-contract?)))
@@ -359,6 +385,7 @@
          ;; the same blame labels are applied
          (and (has-contract? v)
               (contract-struct-stronger? c (value-contract v))
+              ;(not (contract-struct-weaker? (value-contract v) c))
               (equal? (blame-positive (value-blame v))
                       (blame-positive b))
               (equal? (blame-negative (value-blame v))
@@ -372,6 +399,7 @@
          (and (not (chaperone-contract-struct? c))
               (has-contract? v)
               (contract-struct-stronger? c (value-contract v))
+              ;;(not (contract-struct-weaker? (value-contract v) c))
               (equal? (blame-positive (value-blame v))
                       (blame-negative b))
               (equal? (blame-negative (value-blame v))
@@ -477,6 +505,7 @@
 (define (any? x) #t)
 
 (define (weakest a b) #f)
+(define (strongest a b) #f)
 
 (define ((get-first-order-projection get-name get-first-order) c)
   (first-order-projection (get-name c) (get-first-order c)))
@@ -499,7 +528,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (define-struct make-contract [ name first-order projection val-first-projection 
-                                    stronger generate exercise list-contract? ]
+                                    stronger weaker generate exercise list-contract? ]
   #:omit-define-syntaxes
   #:property prop:custom-write
   (λ (stct port display?)
@@ -513,12 +542,13 @@
    #:projection (lambda (c) (make-contract-projection c))
    #:val-first-projection (lambda (c) (make-contract-val-first-projection c))
    #:stronger (lambda (a b) ((make-contract-stronger a) a b))
+   #:weaker (λ (a b) ((make-contract-weaker a) a b))
    #:generate (lambda (c) (make-contract-generate c))
    #:exercise (lambda (c) (make-contract-exercise c))
    #:list-contract? (λ (c) (make-contract-list-contract? c))))
 
 (define-struct make-chaperone-contract [ name first-order projection val-first-projection
-                                              stronger generate exercise list-contract? ]
+                                              stronger weaker generate exercise list-contract? ]
   #:omit-define-syntaxes
   #:property prop:custom-write
   (λ (stct port display?)
@@ -532,12 +562,13 @@
    #:projection (lambda (c) (make-chaperone-contract-projection c))
    #:val-first-projection (lambda (c) (make-chaperone-contract-val-first-projection c))
    #:stronger (lambda (a b) ((make-chaperone-contract-stronger a) a b))
+   #:weaker (λ (a b) ((make-chaperone-contract-weaker a) a b))
    #:generate (lambda (c) (make-chaperone-contract-generate c))
    #:exercise (lambda (c) (make-chaperone-contract-exercise c))
    #:list-contract? (λ (c) (make-chaperone-contract-list-contract? c))))
 
 (define-struct make-flat-contract [ name first-order projection val-first-projection
-                                         stronger generate exercise list-contract? ]
+                                         stronger weaker generate exercise list-contract? ]
   #:omit-define-syntaxes
   #:property prop:custom-write
   (λ (stct port display?)
@@ -551,6 +582,7 @@
    #:val-first-projection (λ (c) (make-flat-contract-val-first-projection c))
    #:projection (lambda (c) (make-flat-contract-projection c))
    #:stronger (lambda (a b) ((make-flat-contract-stronger a) a b))
+   #:weaker (λ (a b) ((make-flat-contract-weaker a) a b))
    #:generate (lambda (c) (make-flat-contract-generate c))
    #:exercise (lambda (c) (make-flat-contract-exercise c))
    #:list-contract? (λ (c) (make-flat-contract-list-contract? c))))
@@ -561,6 +593,7 @@
          #:projection [projection #f]
          #:val-first-projection [val-first-projection #f]
          #:stronger [stronger #f]
+         #:weaker [weaker #f]
          #:generate [generate (λ (ctc) (λ (fuel) #f))]
          #:exercise [exercise (λ (ctc) (λ (fuel) (values void '())))]
          #:list-contract? [list-contract? (λ (ctc) #f)])
@@ -571,11 +604,12 @@
          [val-first-projection (or val-first-projection 
                                    (and (not projection)
                                         (val-first-first-order-projection name first-order)))]
-         [stronger (or stronger as-strong?)])
+         [stronger (or stronger as-strong?)]
+         [weaker (or weaker as-strong?)])
 
     (mk name first-order 
         projection val-first-projection
-        stronger 
+        stronger weaker
         generate exercise
         list-contract?)))
 

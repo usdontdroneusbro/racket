@@ -515,7 +515,7 @@
                             #f
                             
                             (class-orig-cls cls)
-                            internal-ctc blame
+                            (class-contract cls) blame
                             #f #f ; serializer is never set
 
                             (class-check-undef? cls)
@@ -828,7 +828,7 @@
        (let ()
          (define that-mapping
            (map cons
-                (class/c-methods this)
+                (class/c-methods that)
                 (class/c-method-contracts that)))
          (for/and ([m (in-list (class/c-methods this))]
                    [m-ctc (in-list (class/c-method-contracts this))])
@@ -1223,9 +1223,9 @@
 (define (instanceof/c-stronger? this that)
   (and (base-instanceof/c? that)
        (let ()
-        (define this-class/c (base-instanceof/c-class-ctc this))
-        (define that-class/c (base-instanceof/c-class-ctc that))
-        (contract-stronger? this-class/c that-class/c))))
+         (define this-class/c (base-instanceof/c-class-ctc this))
+         (define that-class/c (base-instanceof/c-class-ctc that))
+         (contract-stronger? this-class/c that-class/c))))
 
 (define-struct base-instanceof/c (class-ctc)
   #:property prop:contract

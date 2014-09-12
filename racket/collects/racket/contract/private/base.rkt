@@ -173,14 +173,28 @@
        (define blame-known (blame-add-context blame #f))
        (λ (val)
          ((f blame-known) val)))]))
+
+(define current-seen (make-parameter (hash)))
   
 (define (recursive-contract-stronger this that)
-  (or (and (recursive-contract? that)
+  (or (hash-ref (current-seen) (list this that) #f)
+      (and (recursive-contract? that)
            (procedure-closure-contents-eq? (recursive-contract-thunk this)
                                            (recursive-contract-thunk that)))
       (and (recursive-contract-ctc this)
            (not (symbol? (recursive-contract-ctc this)))
-           (contract-stronger? (recursive-contract-ctc this) that))))
+           (parameterize ([current-seen (hash-set (current-seen) (list this that) #t)])
+             (contract-stronger? (recursive-contract-ctc this) that)))))
+
+(define (recursive-contract-weaker this that)
+  (or (hash-ref (current-seen) (list this that) #f)
+      (and (recursive-contract? that)
+           (procedure-closure-contents-eq? (recursive-contract-thunk this)
+                                           (recursive-contract-thunk that)))
+      (and (recursive-contract-ctc this)
+           (not (symbol? (recursive-contract-ctc this)))
+           (parameterize ([current-seen (hash-set (current-seen) (list this that) #t)])
+             (contract-weaker? that (recursive-contract-ctc this))))))
 
 (define ((recursive-contract-first-order ctc) val)
   (contract-first-order-passes? (force-recursive-contract ctc)
@@ -196,6 +210,7 @@
    #:first-order recursive-contract-first-order
    #:projection recursive-contract-projection
    #:stronger recursive-contract-stronger
+   #:weaker recursive-contract-weaker
    #:list-contract? recursive-contract-list-contract?))
 (struct chaperone-recursive-contract recursive-contract ()
   #:property prop:custom-write custom-write-property-proc
@@ -205,6 +220,7 @@
    #:first-order recursive-contract-first-order
    #:projection recursive-contract-projection
    #:stronger recursive-contract-stronger
+   #:weaker recursive-contract-weaker
    #:list-contract? recursive-contract-list-contract?))
 (struct impersonator-recursive-contract recursive-contract ()
   #:property prop:custom-write custom-write-property-proc
@@ -214,4 +230,5 @@
    #:first-order recursive-contract-first-order
    #:projection recursive-contract-projection
    #:stronger recursive-contract-stronger
+   #:weaker recursive-contract-weaker
    #:list-contract? recursive-contract-list-contract?))

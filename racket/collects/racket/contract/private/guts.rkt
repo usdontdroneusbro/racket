@@ -21,6 +21,7 @@
          build-compound-type-name
          
          contract-stronger?
+         contract-weaker?
          list-contract?
          
          contract-first-order
@@ -81,6 +82,13 @@
 (define (contract-stronger? a b)
   (contract-struct-stronger? (coerce-contract 'contract-stronger? a)
                              (coerce-contract 'contract-stronger? b)))
+
+;; contract-stronger? : contract contract -> boolean
+;; indicates if one contract is weaker (ie, likes more values) than another
+;; this is not a total order.
+(define (contract-weaker? a b)
+  (contract-struct-weaker? (coerce-contract 'contract-weaker? a)
+                           (coerce-contract 'contract-weaker? b)))
 
 ;; coerce-flat-contract : symbol any/c -> contract
 (define (coerce-flat-contract name x)
