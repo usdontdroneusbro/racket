@@ -340,40 +340,49 @@
 ;; class->sexp : Class [#:object? Boolean] -> S-expression
 ;; Convert a class or object type to an s-expression
 (define (class->sexp cls #:object? [object? #f])
+  (define stx (Class-stx cls))
   (match-define (Class: row-var inits fields methods augments init-rest) cls)
-  (define row-var*
-    (if (and row-var (F? row-var)) `(#:row-var ,(F-n row-var)) '()))
-  (define inits*
-    (if (or object? (null? inits))
-        null
-        (list
-         (cons 'init
-               (for/list ([init inits])
-                 (match-define (list name type opt?) init)
-                 (if opt?
-                     (list name (type->sexp type) '#:optional)
-                     (list name (type->sexp type))))))))
-  (define fields*
-    (if (null? fields)
-        null
-        (list
-         (cons 'field
-               (for/list ([name+type (in-list fields)])
-                 (match-define (list name type) name+type)
-                 `(,name ,(type->sexp type)))))))
-  (define methods*
-    (for/list ([name+type (in-list methods)])
-      (match-define (list name type) name+type)
-      `(,name ,(type->sexp type))))
-  (define augments*
-    (cond [(or object? (null? augments)) '()]
-          [else (list (cons 'augment augments))]))
-  (define init-rest*
-    (if (and init-rest (not object?))
-        (list `(init-rest ,init-rest))
-        null))
-  `(,(if object? 'Object 'Class)
-    ,@row-var* ,@inits* ,@init-rest* ,@fields* ,@methods* ,@augments*))
+  (cond [(and (not object?)
+              ;; Don't print with embedded syntax object if the type
+              ;; was row polymorphic and then instantiated (since then the
+              ;; row variable in the syntax is nonsense)
+              (not (Row? row-var))
+              stx)
+         => syntax->datum]
+        [else
+         (define row-var*
+           (if (and row-var (F? row-var)) `(#:row-var ,(F-n row-var)) '()))
+         (define inits*
+           (if (or object? (null? inits))
+               null
+               (list
+                (cons 'init
+                      (for/list ([init inits])
+                        (match-define (list name type opt?) init)
+                        (if opt?
+                            (list name (type->sexp type) '#:optional)
+                            (list name (type->sexp type))))))))
+         (define fields*
+           (if (null? fields)
+               null
+               (list
+                (cons 'field
+                      (for/list ([name+type (in-list fields)])
+                        (match-define (list name type) name+type)
+                        `(,name ,(type->sexp type)))))))
+         (define methods*
+           (for/list ([name+type (in-list methods)])
+             (match-define (list name type) name+type)
+             `(,name ,(type->sexp type))))
+         (define augments*
+           (cond [(or object? (null? augments)) '()]
+                 [else (list (cons 'augment augments))]))
+         (define init-rest*
+           (if (and init-rest (not object?))
+               (list `(init-rest ,init-rest))
+               null))
+         `(,(if object? 'Object 'Class)
+           ,@row-var* ,@inits* ,@init-rest* ,@fields* ,@methods* ,@augments*)]))
 
 ;; type->sexp : Type -> S-expression
 ;; convert a type to an s-expression that can be printed

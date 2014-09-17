@@ -781,7 +781,8 @@
               (check-constraints augments (cadddr constraints)))
 
             (define class-type
-              (make-Class row-var given-inits fields methods augments given-init-rest))
+              (make-Class row-var given-inits fields methods augments given-init-rest
+                          #:stx stx))
 
             class-type]
            [else

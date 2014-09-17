@@ -28,6 +28,7 @@
          Poly-n
          PolyDots-n
          Class? Row? Row:
+         Class-stx ; for printing and serialization
          free-vars*
          type-equal?
          remove-dups
@@ -517,14 +518,18 @@
 
 ;; row-ext : Option<(U F B Row)>
 ;; row     : Row
+;; stx     : (U #f Syntax)
 ;;
 ;; interp. The first field represents a row extension
 ;;         The second field represents the concrete row
 ;;         that the class starts with
+;;         The third field is used for printing
 ;;
 (def-type Class ([row-ext (or/c #f F? B? Row?)]
-                 [row Row?])
+                 [row Row?]
+                 [stx (or/c #f syntax?)])
   #:no-provide
+  [#:intern (list (and row-ext (Rep-seq row-ext)) (Rep-seq row))]
   [#:frees (λ (f) (combine-frees
                    ;; FIXME: is this correct?
                    `(,@(or (and (F? row-ext) (list (f row-ext)))
@@ -535,7 +540,8 @@
                 [(list row-ext row)
                  (*Class
                   (and row-ext (type-rec-id row-ext))
-                  (type-rec-id row))])])
+                  (type-rec-id row)
+                  stx)])])
 
 ;; cls : Class
 (def-type Instance ([cls Type/c]) [#:key 'instance])
@@ -963,15 +969,17 @@
 ;; Class*
 ;; This is a custom constructor for Class types that
 ;; doesn't require writing make-Row everywhere
-(define/cond-contract (Class* row-var inits fields methods augments init-rest)
-  (-> (or/c F? B? Row? #f)
-      (listof (list/c symbol? Type/c boolean?))
-      (listof (list/c symbol? Type/c))
-      (listof (list/c symbol? Function?))
-      (listof (list/c symbol? Function?))
-      (or/c Type/c #f)
-      Class?)
-  (*Class row-var (Row* inits fields methods augments init-rest)))
+(define/cond-contract (Class* row-var inits fields methods augments init-rest
+                              #:stx [stx #f])
+  (->* [(or/c F? B? Row? #f)
+        (listof (list/c symbol? Type/c boolean?))
+        (listof (list/c symbol? Type/c))
+        (listof (list/c symbol? Function?))
+        (listof (list/c symbol? Function?))
+        (or/c Type/c #f)]
+       [#:stx (or/c #f syntax?)]
+       Class?)
+  (*Class row-var (Row* inits fields methods augments init-rest) stx))
 
 ;; Class:*
 ;; This match expander replaces the built-in matching with

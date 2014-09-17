@@ -115,7 +115,8 @@
                            (list ,@(convert fields))
                            (list ,@(convert methods))
                            (list ,@(convert augments))
-                           ,(sub init-rest)))
+                           ,(sub init-rest)
+                           #:stx (quote-syntax ,(Class-stx v))))
             (define name (gensym))
             (define cache-box (current-class-cache))
             (when cache-box
