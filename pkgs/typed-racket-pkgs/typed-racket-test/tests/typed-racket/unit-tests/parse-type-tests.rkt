@@ -19,7 +19,7 @@
          (base-env base-types base-types-extra colon)
          ;; needed for parsing case-lambda/case-> types
          (only-in (base-env case-lambda) case-lambda)
-         (only-in racket/class init init-field field augment)
+         (only-in typed/racket/class init init-field field augment)
 
          rackunit)
 

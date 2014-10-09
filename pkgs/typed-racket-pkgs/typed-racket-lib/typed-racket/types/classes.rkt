@@ -6,7 +6,8 @@
 (require "../utils/utils.rkt"
          (rep type-rep rep-utils)
          (types resolve)
-         (except-in racket/class private)
+         (except-in (base-env class-clauses)
+                    private)
          racket/dict
          racket/list
          racket/match
@@ -14,7 +15,7 @@
          syntax/stx
          (only-in unstable/list check-duplicate)
          (only-in unstable/sequence in-syntax)
-         (for-template racket/class))
+         (for-template (base-env class-clauses)))
 
 (provide Class:
          row-constraints
