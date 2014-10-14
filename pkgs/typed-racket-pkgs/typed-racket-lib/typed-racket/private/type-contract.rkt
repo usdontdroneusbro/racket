@@ -132,6 +132,8 @@
                                  "type" #,(pretty-format-type type #:indent 8))))]
            [else
             (match-define (list defs ctc) result)
+            ;(displayln (map syntax->datum defs))
+            ;(displayln (syntax->datum ctc))
             #`(begin #,@defs
                      (define ctc-id #,ctc)
                      (define-module-boundary-contract #,untyped-id
@@ -157,6 +159,7 @@
 (define (change-contract-fixups forms)
   (define ctc-cache (make-hash))
   (define alias-defs (fixup-type-aliases forms ctc-cache))
+  (displayln alias-defs)
   (define require-typed-defs
     (for/list ([e (in-syntax forms)]
                #:unless (alias-contract-def e))
@@ -183,7 +186,7 @@
   ;; restrictive kind of contract that can be generated for the alias
   (for/fold ([contracts (make-list (length forms) #f)])
             ([kind (in-list '(flat chaperone impersonator))])
-    ;; clear out #f entries after each loop because a failure to generate
+    ;; clear out failure entries after each loop because a failure to generate
     ;; a flat contract doesn't rule out a chaperone or impersonator one
     (for ([k (in-list (dict-keys alias-info))])
       (define v (free-id-table-ref alias-info k #f))
@@ -192,20 +195,28 @@
     (define new-contracts
       ;; run this until fixpoint to ensure that contract failures in mutually
       ;; recursive type aliases are found and turned into failure syntaxes
-      (let loop ([old contracts])
-        (define current
-          (for/list ([e (in-list forms)]
+      (let loop ([old contracts]
+                 [current-cache ctc-cache])
+        (define-values (current new-cache)
+          (for/fold ([current null] [new-cache current-cache])
+                    ([e (in-list forms)]
                      [ctc (in-list contracts)])
             ;; use the previous contract if it was successful (i.e., flat
             ;; instead of chaperone, chaperone instead of impersonator)
             ;; since we want the most specific
-            (or (non-contract-entry? ctc)
-                (generate-contract-def/alias e kind ctc-cache))))
+            (if (not (non-contract-entry? ctc))
+                (values (append current (list #f)) current-cache)
+                (let-values ([(def cache) (generate-contract-def/alias e kind ctc-cache)])
+                  (when def
+                   (displayln (syntax->datum def)))
+                  (if def
+                      (values (append current (list def)) current-cache)
+                      (values (append current (list #f)) current-cache))))))
         ;; we reach a fixpoint if the #f/string entries don't change
         (if (equal? (filter non-contract-entry? current)
                     (filter non-contract-entry? old))
             current
-            (loop current))))
+            (loop current ctc-cache))))
     (map (λ (new old) (or new old))
          new-contracts
          contracts)))
@@ -219,9 +230,11 @@
      (contract-def/alias-property #'body)]
     [_ #f]))
 
-;; generate-contract-def/alias : Syntax -> (U Syntax #f)
-;; Generate a contract that goes with a type alias
+;; generate-contract-def/alias : Syntax -> (U Syntax #f) (U Hash #f)
+;; Generate a contract that goes with a type alias and returns a new
+;; hash if there wasn't a failure
 (define (generate-contract-def/alias stx kind cache)
+  (define new-cache (hash-copy cache))
   (define prop (alias-contract-def stx))
   (define-values (typed-side type-stx)
     (syntax-case prop ()
@@ -235,31 +248,36 @@
        (type->contract typ
                        #:typed-side typed-side
                        #:kind kind
-                       #:cache cache
+                       #:cache new-cache
                        (λ (#:reason [reason #f])
                          (set! failed? #t)
                          (set! failure-reason reason)
                          (free-id-table-set! alias-info #'n reason))))
-     (cond [(and failed? (not (eq? kind 'impersonator))) #f]
+     (cond [(and failed? (not (eq? kind 'impersonator))) (values #f #f)]
            [failed?
-            (ignore (quasisyntax/loc stx (void)))]
+            (values (ignore (quasisyntax/loc stx (void))) #f)]
            [else
             (match-define (list defs ctc) result)
+            ;(printf "~a -- ~a~n" #'n kind)
+            ;(displayln (map syntax->datum defs))
+            ;(displayln (syntax->datum ctc))
             (free-id-table-set! alias-info #'n kind)
-            (ignore
-             (quasisyntax/loc stx
-               (begin
-                #,@defs
-                ;; This expression is needed to communicate the table data to other
-                ;; modules. Ordinary environment serialization via #%type-decl doesn't work
-                ;; because #%type-decl is generated too early in the type-checker.
-                #;
-                (begin-for-syntax (require typed-racket/private/alias-info)
-                                  (free-id-table-set! alias-info (quote-syntax n) (quote #,kind)))
-                (define-values (n)
-                  ;; the recursive contract is actually needed in this case since these
-                  ;; are all recursive/mutually recursive type aliases
-                  (recursive-contract #,ctc #,(contract-kind->keyword kind))))))])]
+            (values
+             (ignore
+              (quasisyntax/loc stx
+                (begin
+                  ;; This expression is needed to communicate the table data to other
+                  ;; modules. Ordinary environment serialization via #%type-decl doesn't work
+                  ;; because #%type-decl is generated too early in the type-checker.
+                  (begin-for-syntax (require typed-racket/private/alias-info)
+                                    (free-id-table-set! alias-info (quote-syntax n) (quote #,kind)))
+                  (define-values (n)
+                    ;; the recursive contract is actually needed in this case since these
+                    ;; are all recursive/mutually recursive type aliases
+                    (recursive-contract #,ctc #,(contract-kind->keyword kind)))
+                  #,@defs
+                  )))
+             new-cache)])]
     [_ (int-err "should never happen - not a define-values: ~a"
                 (syntax->datum stx))]))
 
@@ -339,8 +357,7 @@
                         #:kind [kind 'impersonator]
                         #:cache [cache (make-hash)])
   (let/ec escape
-    (define (fail #:reason [reason #f])
-      (call-with-values (λ () (init-fail #:reason reason)) escape))
+    (define (fail #:reason [reason #f]) (escape (init-fail #:reason reason)))
     (instantiate
       (optimize
         (type->static-contract ty #:typed-side typed-side fail)
@@ -438,11 +455,12 @@
              [(both) ctc-b]
              [(untyped) ctc-u]))
          (define alias-kind (free-id-table-ref alias-info ctc-id #f))
+         ;(displayln alias-kind)
          (match alias-kind
            [(? string?)   (fail #:reason alias-kind)]
-           ['impersonator (impersonator/sc ctc-id)]
-           ['chaperone    (chaperone/sc ctc-id)]
-           [_             (flat/sc ctc-id)])]
+           ['impersonator (impersonator/sc #`(recursive-contract #,ctc-id #:impersonator))]
+           ['chaperone    (chaperone/sc #`(recursive-contract #,ctc-id #:chaperone))]
+           [_             (flat/sc #`(recursive-contract #,ctc-id #:flat))])]
         ;; Ordinary type applications or struct type names, just resolve
         [(or (App: _ _ _) (Name: _ _ _ _ #t)) (t->sc (resolve-once type))]
         [(Univ:) (if (from-typed? typed-side) any-wrap/sc any/sc)]
