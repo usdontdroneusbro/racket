@@ -39,13 +39,20 @@
             (contract-restrict-recursive-values (compute-constraints sc kind)))))))
 
 (define (compute-constraints sc max-kind)
+  (define memo-table (make-hash))
   (define (recur sc)
-    (match sc
-      [(recursive-sc names values body)
-       (close-loop names (map recur values) (recur body))]
-      [(? sc?)
-       (sc->constraints sc recur)]))
+    (cond [(hash-ref memo-table sc #f)]
+          [else
+           (define result
+             (match sc
+               [(recursive-sc names values body)
+                (close-loop names (map recur values) (recur body))]
+               [(? sc?)
+                (sc->constraints sc recur)]))
+           (hash-set! memo-table sc result)
+           result]))
   (define constraints (recur sc))
+  (displayln "done constraints")
   #;(validate-constraints (add-constraint constraints max-kind))
   constraints)
 

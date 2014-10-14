@@ -148,12 +148,19 @@
    [(untyped) 'typed]
    [(both) 'both]))
 
+(require racket/format)
 (define (type->contract ty init-fail #:typed-side [typed-side #t] #:kind [kind 'impersonator])
   (let/ec escape
     (define (fail #:reason [reason #f]) (escape (init-fail #:reason reason)))
+    (define sc (type->static-contract ty #:typed-side typed-side fail))
+    ;(define-values (in out) (make-pipe 10000))
+    ;(thread (lambda () (displayln sc out)))
+    ;(displayln (read-string 10000 in))
+    (displayln "done generating")
     (instantiate
-      (optimize
-        (type->static-contract ty #:typed-side typed-side fail)
+      sc
+        #;
+      (optimize sc
         #:trusted-positive typed-side
         #:trusted-negative (not typed-side))
       fail
@@ -193,20 +200,20 @@
              [typed-side typed-side-expr])
          (define key (cons (Type-seq type) typed-side))
          (cond [(hash-ref sc-cache key #f)
-                => (λ (sc) (printf "hit ~a~n" type) sc)]
+                => (λ (sc) #;(printf "hit ~a~n" type) sc)]
                [else
                 (define sc (match type match-clause ...))
                 (unless (or (member (Type-seq type) (dont-cache))
                             (ormap (λ (n) (member n (fv type))) (bound-names)))
                   (hash-set! sc-cache key sc))
-                (printf "didn't cache ~a~n" type)
+                #;(printf "didn't cache ~a~n" type)
                 sc]))]))
 
 (define (type->static-contract type init-fail #:typed-side [typed-side #t])
   (let/ec return
     (define (fail #:reason reason) (return (init-fail #:reason reason)))
     (let loop ([depth 0] [type type] [typed-side (if typed-side 'typed 'untyped)] [recursive-values (hash)])
-      (printf "depth: ~a~n" depth)
+      ;(printf "depth: ~a~n" depth)
       (define (t->sc t #:recursive-values (recursive-values recursive-values))
         (loop (add1 depth) t typed-side recursive-values))
       (define (t->sc/neg t #:recursive-values (recursive-values recursive-values))
@@ -248,8 +255,8 @@
          ;;        the same name that are somehow used together, if that's
          ;;        possible
          (define name (syntax-e name-id))
-         (define deps (map syntax-e dep-ids))
-         (displayln recursive-values)
+         (define deps (map syntax-e dep-ids) #;(remove name (map syntax-e dep-ids)))
+         ;(displayln recursive-values)
          (cond [;; recursive references are looked up, see F case
                 (hash-ref recursive-values name #f) =>
                 (λ (rv) (triple-lookup rv typed-side))]
@@ -292,12 +299,13 @@
 
                 ;; Now actually generate the static contracts
                 (case typed-side
-                 [(both) (recursive-sc
+                 [(typed untyped both) (recursive-sc
                           (append (list both-n*) both-deps)
                           (cons (parameterize ([dont-cache (cons (Type-seq type) (dont-cache))])
                                   (loop (add1 depth) resolved-name 'both rv))
                                 (resolved-deps->scs 'both))
                           (recursive-sc-use both-n*))]
+                 #;
                  [(typed untyped)
                   (define untyped (parameterize ([dont-cache (cons (Type-seq type) (dont-cache))])(loop (add1 depth) resolved-name 'untyped rv)))
                   (define typed (parameterize ([dont-cache (cons (Type-seq type) (dont-cache))])  (loop (add1 depth) resolved-name 'typed rv)))
@@ -308,7 +316,7 @@
                      (resolved-deps->scs 'typed)
                      (resolved-deps->scs 'both)))
                   (recursive-sc
-                   (append n*s untyped-deps typed-deps both-deps)
+                   (append untyped-deps typed-deps both-deps)
                    (append (list untyped typed both)
                            untyped-dep-scs typed-dep-scs both-dep-scs)
                    (recursive-sc-use (if (from-typed? typed-side) typed-n* untyped-n*)))])])]
@@ -425,9 +433,9 @@
         [(Instance: (? Mu? t))
          (t->sc (make-Instance (resolve-once t)))]
         [(Instance: (? Name? t))
-         (displayln t)
+         ;(displayln t)
          (begin0 (instanceof/sc (t->sc t))
-           (displayln "return from instanceof")
+           ;(displayln "return from instanceof")
            )]
         [(Instance: (Class: _ _ fields methods _ _))
          (match-define (list (list field-names field-types) ...) fields)
