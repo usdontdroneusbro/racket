@@ -180,15 +180,16 @@
 (define (type->static-contract type init-fail #:typed-side [typed-side #t])
   (let/ec return
     (define (fail #:reason reason) (return (init-fail #:reason reason)))
-    (let loop ([type type] [typed-side (if typed-side 'typed 'untyped)] [recursive-values (hash)])
+    (let loop ([depth 0] [type type] [typed-side (if typed-side 'typed 'untyped)] [recursive-values (hash)])
+      (printf "depth: ~a~n" depth)
       (define (t->sc t #:recursive-values (recursive-values recursive-values))
-        (loop t typed-side recursive-values))
+        (loop (add1 depth) t typed-side recursive-values))
       (define (t->sc/neg t #:recursive-values (recursive-values recursive-values))
-        (loop t (flip-side typed-side) recursive-values))
+        (loop (add1 depth) t (flip-side typed-side) recursive-values))
       (define (t->sc/both t #:recursive-values (recursive-values recursive-values))
-        (loop t 'both recursive-values))
-      (define (t->sc/method t) (t->sc/function t fail typed-side recursive-values loop #t))
-      (define (t->sc/fun t) (t->sc/function t fail typed-side recursive-values loop #f))
+        (loop (add1 depth) t 'both recursive-values))
+      (define (t->sc/method t) (t->sc/function depth t fail typed-side recursive-values loop #t))
+      (define (t->sc/fun t) (t->sc/function depth t fail typed-side recursive-values loop #f))
 
       (define (only-untyped sc)
         (if (from-typed? typed-side)
@@ -222,6 +223,7 @@
          ;;        possible
          (define name (syntax-e name-id))
          (define deps (map syntax-e dep-ids))
+         (displayln recursive-values)
          (cond [;; recursive references are looked up, see F case
                 (hash-ref recursive-values name #f) =>
                 (λ (rv) (triple-lookup rv typed-side))]
@@ -260,19 +262,19 @@
                 (define (resolved-deps->scs typed-side)
                   (for/list ([resolved-dep (in-list resolved-deps)]
                              [dep (in-list deps)])
-                    (loop resolved-dep typed-side rv)))
+                    (loop (add1 depth) resolved-dep typed-side rv)))
 
                 ;; Now actually generate the static contracts
                 (case typed-side
                  [(both) (recursive-sc
                           (append (list both-n*) both-deps)
-                          (cons (loop resolved-name 'both rv)
+                          (cons (loop (add1 depth) resolved-name 'both rv)
                                 (resolved-deps->scs 'both))
                           (recursive-sc-use both-n*))]
                  [(typed untyped)
-                  (define untyped (loop resolved-name 'untyped rv))
-                  (define typed (loop resolved-name 'typed rv))
-                  (define both (loop resolved-name 'both rv))
+                  (define untyped (loop (add1 depth) resolved-name 'untyped rv))
+                  (define typed (loop (add1 depth) resolved-name 'typed rv))
+                  (define both (loop (add1 depth) resolved-name 'both rv))
                   (define-values (untyped-dep-scs typed-dep-scs both-dep-scs)
                     (values
                      (resolved-deps->scs 'untyped)
@@ -380,13 +382,13 @@
          (case typed-side
            [(both) (recursive-sc
                      (list both-n*)
-                     (list (loop b 'both rv))
+                     (list (loop (add1 depth) b 'both rv))
                      (recursive-sc-use both-n*))]
            [(typed untyped)
             ;; TODO not fail in cases that don't get used
-            (define untyped (loop b 'untyped rv))
-            (define typed (loop b 'typed rv))
-            (define both (loop b 'both rv))
+            (define untyped (loop (add1 depth) b 'untyped rv))
+            (define typed (loop (add1 depth) b  'typed rv))
+            (define both (loop (add1 depth) b 'both rv))
   
             (recursive-sc
                      n*s
@@ -395,7 +397,10 @@
         [(Instance: (? Mu? t))
          (t->sc (make-Instance (resolve-once t)))]
         [(Instance: (? Name? t))
-         (instanceof/sc (t->sc t))]
+         (displayln t)
+         (begin0 (instanceof/sc (t->sc t))
+           (displayln "return from instanceof")
+           )]
         [(Instance: (Class: _ _ fields methods _ _))
          (match-define (list (list field-names field-types) ...) fields)
          (match-define (list (list public-names public-types) ...) methods)
@@ -465,11 +470,11 @@
         [else
          (fail #:reason "contract generation not supported for this type")]))))
 
-(define (t->sc/function f fail typed-side recursive-values loop method?)
+(define (t->sc/function depth f fail typed-side recursive-values loop method?)
   (define (t->sc t #:recursive-values (recursive-values recursive-values))
-    (loop t typed-side recursive-values))
+    (loop (add1 depth) t typed-side recursive-values))
   (define (t->sc/neg t #:recursive-values (recursive-values recursive-values))
-    (loop t (flip-side typed-side) recursive-values))
+    (loop (add1 depth) t (flip-side typed-side) recursive-values))
   (match f
     [(Function: arrs)
      ;; Try to generate a single `->*' contract if possible.
