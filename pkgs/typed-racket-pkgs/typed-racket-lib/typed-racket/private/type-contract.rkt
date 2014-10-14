@@ -286,9 +286,6 @@
                 ;; resolved-deps->scs : (U 'untyped 'typed 'both)
                 ;;                      -> (Listof Static-Contract)
                 (define (resolved-deps->scs typed-side)
-                  (for/list ([resolved-dep (in-list resolved-deps)]
-                             [dep (in-list deps)])
-                    (loop (add1 depth) resolved-dep typed-side rv)))
                   (for/list ([resolved-dep resolved-deps])
                     (parameterize ([dont-cache (cons (Type-seq type) (dont-cache))])
                       (loop (add1 depth) resolved-dep typed-side rv))))
