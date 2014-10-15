@@ -163,7 +163,7 @@
                                  "for identifier" #,(symbol->string (syntax-e #'id))
                                  "type" #,(pretty-format-type ty #:indent 8)))))
      (for-each displayln (map syntax->datum definitions))
-     (displayln #'ctc-definition)
+     (displayln (syntax->datum #'ctc-definition))
       (values
         #`(begin
             #,@definitions

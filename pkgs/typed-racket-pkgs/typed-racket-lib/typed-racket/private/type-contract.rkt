@@ -93,7 +93,7 @@
                        (type->contract-fail typ* prop)))
      (for-each displayln (map syntax->datum defs))
      (displayln defs)
-     (displayln cnt)
+     (displayln (syntax->datum cnt))
      (ignore ; should be ignored by the optimizer
       (quasisyntax/loc
         stx
@@ -189,7 +189,7 @@
 (define (no-duplicates l)
   (= (length l) (length (remove-duplicates l))))
 
-(struct triple (untyped typed both))
+(struct triple (untyped typed both) #:transparent)
 (define (triple-lookup trip side)
   (case side
     ((untyped) (triple-untyped trip))
@@ -197,6 +197,16 @@
     ((both) (triple-both trip))))
 (define (same sc)
   (triple sc sc sc))
+
+(struct id-wrap (id)
+  #:methods gen:equal+hash
+  [(define (equal-proc this that recur)
+     (free-identifier=? (id-wrap-id this)
+                        (id-wrap-id that)))
+   (define (hash-proc this recur)
+     (recur (identifier-binding-symbol (id-wrap-id this))))
+   (define (hash2-proc this recur)
+     (recur (identifier-binding-symbol (id-wrap-id this))))])
 
 ;; sc-cache : Hash<(Pair Integer Symbol), Static-Contract>
 ;; This hashtable memoizes the static contracts generated from types.
@@ -215,13 +225,14 @@
              [typed-side typed-side-expr])
          (define key (cons (Type-seq type) typed-side))
          (cond [(hash-ref sc-cache key #f)
-                => (λ (sc) #;(printf "hit ~a~n" type) sc)]
+                => (λ (sc) (printf "hit ~a~n" type) sc)]
                [else
                 (define sc (match type match-clause ...))
-                (unless (or (member (Type-seq type) (dont-cache))
-                            (ormap (λ (n) (member n (fv type))) (bound-names)))
-                  (hash-set! sc-cache key sc))
-                #;(printf "didn't cache ~a~n" type)
+                (if (not (or (member (Type-seq type) (dont-cache))
+                             (ormap (λ (n) (member n (fv type))) (bound-names))))
+                    (hash-set! sc-cache key sc)
+                (printf "didn't cache ~a~n" type)
+                    )
                 sc]))]))
 
 (define (type->static-contract type init-fail #:typed-side [typed-side #t])
@@ -265,16 +276,21 @@
                                                   (recursive-sc-use name*)))))
                               (recursive-sc-use name*))])]
         ;; Implicit recursive aliases
-        [(Name: name-id dep-ids args #f)
+        [(Name: name-id *dep-ids args #f)
          ;; FIXME: this may not be correct for different aliases that have
          ;;        the same name that are somehow used together, if that's
          ;;        possible
          (define name (syntax-e name-id))
-         (define deps (map syntax-e dep-ids) #;(remove name (map syntax-e dep-ids)))
+         (printf "name ~a typed-side ~a~n" (identifier-binding-symbol name-id) typed-side)
+         (define dep-ids (remove name-id *dep-ids free-identifier=?))
+         (define deps (map syntax-e dep-ids))
          ;(displayln recursive-values)
          (cond [;; recursive references are looked up, see F case
-                (hash-ref recursive-values name #f) =>
-                (λ (rv) (triple-lookup rv typed-side))]
+                (hash-ref recursive-values (id-wrap name-id) #f) =>
+                (λ (rv) (define result (triple-lookup rv typed-side))
+                   (displayln recursive-values)
+                   (printf "hit ~a~n" result)
+                   result)]
                [else
                 ;; see Mu case, which uses similar machinery
                 (match-define (and n*s (list untyped-n* typed-n* both-n*))
@@ -285,18 +301,18 @@
                           (generate-temporaries deps)))
                 ;; Set recursive references for the `name` itself
                 (define *rv
-                  (hash-set recursive-values name
+                  (hash-set recursive-values (id-wrap name-id)
                             (triple (recursive-sc-use untyped-n*)
                                     (recursive-sc-use typed-n*)
                                     (recursive-sc-use both-n*))))
                 ;; Add in references for the dependency aliases
                 (define rv
                   (for/fold ([rv *rv])
-                            ([dep (in-list deps)]
+                            ([dep (in-list dep-ids)]
                              [untyped-dep (in-list untyped-deps)]
                              [typed-dep (in-list typed-deps)]
                              [both-dep (in-list both-deps)])
-                    (hash-set rv dep
+                    (hash-set rv (id-wrap dep)
                               (triple (recursive-sc-use untyped-dep)
                                       (recursive-sc-use typed-dep)
                                       (recursive-sc-use both-dep)))))
@@ -314,13 +330,12 @@
 
                 ;; Now actually generate the static contracts
                 (case typed-side
-                 [(typed untyped both) (recursive-sc
+                 [(both) (recursive-sc
                           (append (list both-n*) both-deps)
                           (cons (parameterize ([dont-cache (cons (Type-seq type) (dont-cache))])
                                   (loop (add1 depth) resolved-name 'both rv))
                                 (resolved-deps->scs 'both))
                           (recursive-sc-use both-n*))]
-                 #;
                  [(typed untyped)
                   (define untyped (parameterize ([dont-cache (cons (Type-seq type) (dont-cache))])(loop (add1 depth) resolved-name 'untyped rv)))
                   (define typed (parameterize ([dont-cache (cons (Type-seq type) (dont-cache))])  (loop (add1 depth) resolved-name 'typed rv)))
@@ -331,7 +346,7 @@
                      (resolved-deps->scs 'typed)
                      (resolved-deps->scs 'both)))
                   (recursive-sc
-                   (append untyped-deps typed-deps both-deps)
+                   (append n*s untyped-deps typed-deps both-deps)
                    (append (list untyped typed both)
                            untyped-dep-scs typed-dep-scs both-dep-scs)
                    (recursive-sc-use (if (from-typed? typed-side) typed-n* untyped-n*)))])])]
@@ -448,11 +463,10 @@
         [(Instance: (? Mu? t))
          (t->sc (make-Instance (resolve-once t)))]
         [(Instance: (? Name? t))
-         ;(displayln t)
-         (begin0 (instanceof/sc (t->sc t))
-           ;(displayln "return from instanceof")
-           )]
+         (displayln type)
+         (instanceof/sc (t->sc t))]
         [(Instance: (Class: _ _ fields methods _ _))
+         (printf "non-name ~a~n" type)
          (match-define (list (list field-names field-types) ...) fields)
          (match-define (list (list public-names public-types) ...) methods)
          (object/sc (append (map (λ (n sc) (member-spec 'method n sc))

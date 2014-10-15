@@ -145,27 +145,26 @@
 ;; determine if a given name is free in the sc
 (define memo-table (make-hash))
 (define (name-free-in? name sc)
-  (define tag (make-continuation-prompt-tag))
-  (define (free? sc _)
+  (define ((free? escape) sc _)
     (cond [(hash-ref memo-table (list sc name) #f)
-           => (λ (x) (fcontrol (eq? x 'free) #:tag tag))]
+           => (λ (x) (when (eq? x 'free)
+                       (escape #t)))]
           [else
            (match sc
              [(or (recursive-sc-use name*) (parametric-var/sc: name*))
               #:when (free-identifier=? name name*)
               (printf "free-id ~a ~a~n" name name*)
               (hash-set! memo-table (list sc name) 'free)
-              (fcontrol #t #:tag tag)]
+              (escape #t)]
              [_
-              (% (sc-traverse sc free?)
-                 (λ (v k)
-                   (cond [v
-                          (hash-set! memo-table (list sc name) 'free)
-                          (fcontrol #t #:tag tag)]
-                         [else (k (void))]))
-                 #:tag tag)
-              (hash-set! memo-table (list sc name) 'non-free)
-              (fcontrol #f #:tag tag)])]))
-  (% (free? sc 'dummy)
-     (λ (v _) v)
-     #:tag tag))
+              (define result
+                (let/ec escape
+                  (sc-traverse sc (free? escape))
+                  #f))
+              (when result
+                (hash-set! memo-table (list sc name) 'free)
+                (escape #t))
+              (hash-set! memo-table (list sc name) 'non-free)])]))
+  (let/ec escape
+    ((free? escape) sc 'dummy)
+    #f))
