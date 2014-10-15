@@ -91,6 +91,9 @@
                        #:kind kind
                        #:cache cache
                        (type->contract-fail typ* prop)))
+     (for-each displayln (map syntax->datum defs))
+     (displayln defs)
+     (displayln cnt)
      (ignore ; should be ignored by the optimizer
       (quasisyntax/loc
         stx
@@ -166,7 +169,7 @@
     ;(thread (lambda () (displayln sc out)))
     ;(displayln (read-string 10000 in))
     (displayln "done generating")
-    (instantiate
+    (define-values (v1 v2) (instantiate
       sc
         #;
       (optimize sc
@@ -174,7 +177,9 @@
         #:trusted-negative (not typed-side))
       fail
       kind
-      #:cache cache)))
+      #:cache cache))
+    (displayln "done")
+    (values v1 v2)))
 
 
 

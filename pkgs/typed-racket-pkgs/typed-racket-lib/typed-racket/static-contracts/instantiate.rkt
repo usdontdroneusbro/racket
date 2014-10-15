@@ -98,10 +98,18 @@
              (make-contract sc))]
           ;; If any names are bound, the contract can't be lifted out
           ;; because it depends on being in the scope of the names
-          [(ormap (λ (n) (not (name-free-in? n sc))) (bound-names))
+          [(ormap (λ (n) (name-free-in? n sc)) (bound-names))
+           ;(printf "free case ~a~n" sc)
+           #;
+           (when (match sc [(recursive-sc-use _) #t] [_ #f])
+             (displayln "recursive use"))
            (make-contract sc)]
           [else
+           ;(printf "cache case ~a~n" sc)
            (define ctc (make-contract sc))
+           (when (identifier? ctc)
+             (printf "caching this, ~a (names: )~n" ctc #;(bound-names)
+                     ))
            (define fresh-id (generate-temporary))
            (hash-set! cache sc (cons fresh-id ctc))
            (enqueue! sc-queue sc)
@@ -111,7 +119,7 @@
       [(recursive-sc names values body)
        (define raw-names (generate-temporaries names))
        (define raw-bindings
-         (parameterize ([bound-names (append names raw-names (bound-names))])
+         (parameterize ([bound-names (append names (bound-names))])
            (for/list ([raw-name (in-list raw-names)]
                       [value (in-list values)])
              #`[#,raw-name #,(recur value)])))
@@ -122,7 +130,7 @@
                                          #,(kind->keyword
                                             (hash-ref recursive-kinds name)))]))
        #`(letrec (#,@bindings #,@raw-bindings)
-           #,(parameterize ([bound-names (append names raw-names (bound-names))])
+           #,(parameterize ([bound-names (append names (bound-names))])
                (recur body)))]
       [(? sc? sc)
        (sc->contract sc recur)]))
@@ -132,13 +140,32 @@
             #`(define #,id #,ctc))
           ctc))
 
+(require racket/control)
+
 ;; determine if a given name is free in the sc
+(define memo-table (make-hash))
 (define (name-free-in? name sc)
-  (let/ec escape
-    (define/match (free? sc _)
-      [((or (recursive-sc-use name*) (parametric-var/sc: name*)) _)
-       (when (free-identifier=? name name*)
-         (escape #f))]
-      [(_ _) (sc-traverse sc free?)])
-    (free? sc 'dummy)
-    #t))
+  (define tag (make-continuation-prompt-tag))
+  (define (free? sc _)
+    (cond [(hash-ref memo-table (list sc name) #f)
+           => (λ (x) (fcontrol (eq? x 'free) #:tag tag))]
+          [else
+           (match sc
+             [(or (recursive-sc-use name*) (parametric-var/sc: name*))
+              #:when (free-identifier=? name name*)
+              (printf "free-id ~a ~a~n" name name*)
+              (hash-set! memo-table (list sc name) 'free)
+              (fcontrol #t #:tag tag)]
+             [_
+              (% (sc-traverse sc free?)
+                 (λ (v k)
+                   (cond [v
+                          (hash-set! memo-table (list sc name) 'free)
+                          (fcontrol #t #:tag tag)]
+                         [else (k (void))]))
+                 #:tag tag)
+              (hash-set! memo-table (list sc name) 'non-free)
+              (fcontrol #f #:tag tag)])]))
+  (% (free? sc 'dummy)
+     (λ (v _) v)
+     #:tag tag))

@@ -214,13 +214,24 @@
   ;; actually needed for mutual recursion. Drop all others.
   (define new-dependency-map
     (for/list ([(id deps) (in-dict new-dependency-map/classes)])
+      ;(printf "old ~a -> ~a~n" id deps)
       ;; find the component this `id` participated in so
       ;; that we can drop `deps` that aren't in that component
       (define component
         (findf (λ (component) (member id component free-identifier=?))
                components))
+      (displayln recursive-aliases)
+      (define actual-name-deps
+        (filter (λ (dep) (member dep recursive-aliases free-identifier=?))
+                deps))
+      (displayln actual-name-deps)
       (define new-deps
-        (filter (λ (dep) (member dep component free-identifier=?)) deps))
+        (remove-duplicates
+         (append component
+                 (filter (λ (dep) (member dep recursive-aliases free-identifier=?))
+                         deps))
+         free-identifier=?))
+      ;(printf "new deps ~a -> ~a~n" id new-deps)
       (cons id new-deps)))
 
   ;; Actually register recursive type aliases
@@ -229,6 +240,7 @@
       (define record (dict-ref type-alias-map id))
       (match-define (list _ args) record)
       (define deps (dict-ref new-dependency-map id))
+      ;(printf "new ~a -> ~a~n" id deps)
       (define name-type (make-Name id deps args #f))
       (register-resolved-type-alias id name-type)
       name-type))
