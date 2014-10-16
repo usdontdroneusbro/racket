@@ -91,9 +91,6 @@
                        #:kind kind
                        #:cache cache
                        (type->contract-fail typ* prop)))
-     (for-each displayln (map syntax->datum defs))
-     (displayln defs)
-     (displayln (syntax->datum cnt))
      (ignore ; should be ignored by the optimizer
       (quasisyntax/loc
         stx
@@ -165,10 +162,6 @@
   (let/ec escape
     (define (fail #:reason [reason #f]) (escape (init-fail #:reason reason)))
     (define sc (type->static-contract ty #:typed-side typed-side fail))
-    ;(define-values (in out) (make-pipe 10000))
-    ;(thread (lambda () (displayln sc out)))
-    ;(displayln (read-string 10000 in))
-    (displayln "done generating")
     (define-values (v1 v2) (instantiate
       sc
         #;
@@ -213,8 +206,16 @@
 ;; The table is keyed by a pair of a Type-seq number and a typed-side symbol
 (define sc-cache (make-hash))
 
-(define dont-cache (make-parameter null))
 (define bound-names (make-parameter null))
+
+;; memoized fv
+(define fv-cache (make-weak-hash))
+(define (fv* type)
+  (cond [(hash-ref fv-cache type #f)]
+        [else
+         (define result (fv type))
+         (hash-set! fv-cache type result)
+         result]))
 
 ;; A convenience macro for use in type->static-contract below that
 ;; helps memoize the static-contract generation.
@@ -224,21 +225,25 @@
      #'(let ([type type-expr]
              [typed-side typed-side-expr])
          (define key (cons (Type-seq type) typed-side))
-         (cond [(hash-ref sc-cache key #f)
-                => (λ (sc) (printf "hit ~a~n" type) sc)]
+         (cond [(hash-ref sc-cache key #f)]
                [else
                 (define sc (match type match-clause ...))
-                (unless (or (ormap (λ (n) (member n (fv type))) (bound-names))
-                            (ormap (λ (n) (member n (free-names type)))
+                (unless (or (ormap (λ (n) (member n (fv* type))) (bound-names))
+                            (ormap (λ (n) (member n (free-names type) free-identifier=?))
                                    (bound-names)))
                   (hash-set! sc-cache key sc))
                 sc]))]))
+
+(define-syntax-rule (with-bound-names names e)
+  (let ([names* names])
+    (parameterize ([bound-names (append names* (bound-names))])
+      e)))
 
 (define (type->static-contract type init-fail #:typed-side [typed-side #t])
   (let/ec return
     (define (fail #:reason reason) (return (init-fail #:reason reason)))
     (let loop ([depth 0] [type type] [typed-side (if typed-side 'typed 'untyped)] [recursive-values (hash)])
-      ;(printf "depth: ~a~n" depth)
+      (printf "depth: ~a~n" depth)
       (define (t->sc t #:recursive-values (recursive-values recursive-values))
         (loop (add1 depth) t typed-side recursive-values))
       (define (t->sc/neg t #:recursive-values (recursive-values recursive-values))
@@ -267,12 +272,11 @@
                 (define name* (generate-temporary name))
                 (recursive-sc (list name*)
                               (list
-                               (parameterize ([dont-cache (cons (Type-seq type) (dont-cache))])
-                                 (t->sc (resolve-once type)
-                                        #:recursive-values
-                                        (hash-set recursive-values
-                                                  (cons name 'app)
-                                                  (recursive-sc-use name*)))))
+                               (t->sc (resolve-once type)
+                                      #:recursive-values
+                                      (hash-set recursive-values
+                                                (cons name 'app)
+                                                (recursive-sc-use name*))))
                               (recursive-sc-use name*))])]
         ;; Implicit recursive aliases
         [(Name: name-id *dep-ids args #f)
@@ -280,16 +284,11 @@
          ;;        the same name that are somehow used together, if that's
          ;;        possible
          (define name (syntax-e name-id))
-         (printf "name ~a typed-side ~a~n" (identifier-binding-symbol name-id) typed-side)
          (define dep-ids (remove name-id *dep-ids free-identifier=?))
          (define deps (map syntax-e dep-ids))
-         ;(displayln recursive-values)
          (cond [;; recursive references are looked up, see F case
-                (hash-ref recursive-values (id-wrap name-id) #f) =>
-                (λ (rv) (define result (triple-lookup rv typed-side))
-                   (displayln recursive-values)
-                   (printf "hit ~a~n" result)
-                   result)]
+                (hash-ref recursive-values (id-wrap name-id) #f)
+                => (λ (rv) (triple-lookup rv typed-side))]
                [else
                 ;; see Mu case, which uses similar machinery
                 (match-define (and n*s (list untyped-n* typed-n* both-n*))
@@ -324,21 +323,28 @@
                 ;;                      -> (Listof Static-Contract)
                 (define (resolved-deps->scs typed-side)
                   (for/list ([resolved-dep resolved-deps])
-                    (parameterize ([dont-cache (cons (Type-seq type) (dont-cache))])
+                    (with-bound-names (cons name-id dep-ids)
                       (loop (add1 depth) resolved-dep typed-side rv))))
 
                 ;; Now actually generate the static contracts
                 (case typed-side
-                 [(both) (recursive-sc
+                 [(typed untyped both) (recursive-sc
                           (append (list both-n*) both-deps)
-                          (cons (parameterize ([dont-cache (cons (Type-seq type) (dont-cache))])
+                          (cons (with-bound-names (cons name-id dep-ids)
                                   (loop (add1 depth) resolved-name 'both rv))
                                 (resolved-deps->scs 'both))
                           (recursive-sc-use both-n*))]
+                 #;
                  [(typed untyped)
-                  (define untyped (parameterize ([dont-cache (cons (Type-seq type) (dont-cache))])(loop (add1 depth) resolved-name 'untyped rv)))
-                  (define typed (parameterize ([dont-cache (cons (Type-seq type) (dont-cache))])  (loop (add1 depth) resolved-name 'typed rv)))
-                  (define both (parameterize ([dont-cache (cons (Type-seq type) (dont-cache))])   (loop (add1 depth) resolved-name 'both rv)))
+                  (define untyped 
+                    (with-bound-names (cons name-id dep-ids)
+                      (loop (add1 depth) resolved-name 'untyped rv)))
+                  (define typed 
+                    (with-bound-names (cons name-id dep-ids)
+                      (loop (add1 depth) resolved-name 'typed rv)))
+                  (define both
+                    (with-bound-names (cons name-id dep-ids)
+                      (loop (add1 depth) resolved-name 'both rv)))
                   (define-values (untyped-dep-scs typed-dep-scs both-dep-scs)
                     (values
                      (resolved-deps->scs 'untyped)
@@ -425,7 +431,7 @@
                  (define rv (for/fold ((rv recursive-values)) ((temp temporaries)
                                                                (v-nm vs-nm))
                               (hash-set rv v-nm (same (parametric-var/sc temp)))))
-                 (parameterize ([bound-names (append (bound-names) temporaries)])
+                 (with-bound-names temporaries
                    (parametric->/sc temporaries
                      (t->sc b #:recursive-values rv))))))]
         [(PolyDots: (list vs ... dotted-v) b)
@@ -451,9 +457,12 @@
                      (recursive-sc-use both-n*))]
            [(typed untyped)
             ;; TODO not fail in cases that don't get used
-            (define untyped (loop (add1 depth) b 'untyped rv))
-            (define typed (loop (add1 depth) b  'typed rv))
-            (define both (loop (add1 depth) b 'both rv))
+            (define untyped (with-bound-names n*s
+                              (loop (add1 depth) b 'untyped rv)))
+            (define typed (with-bound-names n*s
+                            (loop (add1 depth) b  'typed rv)))
+            (define both (with-bound-names n*s
+                           (loop (add1 depth) b 'both rv)))
   
             (recursive-sc
                      n*s
@@ -462,10 +471,8 @@
         [(Instance: (? Mu? t))
          (t->sc (make-Instance (resolve-once t)))]
         [(Instance: (? Name? t))
-         (displayln type)
          (instanceof/sc (t->sc t))]
         [(Instance: (Class: _ _ fields methods _ _))
-         (printf "non-name ~a~n" type)
          (match-define (list (list field-names field-types) ...) fields)
          (match-define (list (list public-names public-types) ...) methods)
          (object/sc (append (map (λ (n sc) (member-spec 'method n sc))

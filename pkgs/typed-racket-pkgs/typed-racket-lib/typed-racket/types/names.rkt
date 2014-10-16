@@ -15,9 +15,9 @@
   (define free-names null)
   (define (fn type)
     (define result
-      (type-case (#:Type free-names
-                  #:Filter (sub-f free-names)
-                  #:Object (sub-o free-names))
+      (type-case (#:Type fn
+                  #:Filter (sub-f fn)
+                  #:Object (sub-o fn))
                  type
         [#:Name n _ _ _
          (let ()

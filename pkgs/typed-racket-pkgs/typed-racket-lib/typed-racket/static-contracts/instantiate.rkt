@@ -99,17 +99,9 @@
           ;; If any names are bound, the contract can't be lifted out
           ;; because it depends on being in the scope of the names
           [(ormap (λ (n) (name-free-in? n sc)) (bound-names))
-           ;(printf "free case ~a~n" sc)
-           #;
-           (when (match sc [(recursive-sc-use _) #t] [_ #f])
-             (displayln "recursive use"))
            (make-contract sc)]
           [else
-           ;(printf "cache case ~a~n" sc)
            (define ctc (make-contract sc))
-           (when (identifier? ctc)
-             (printf "caching this, ~a (names: )~n" ctc #;(bound-names)
-                     ))
            (define fresh-id (generate-temporary))
            (hash-set! cache sc (cons fresh-id ctc))
            (enqueue! sc-queue sc)
@@ -153,7 +145,6 @@
            (match sc
              [(or (recursive-sc-use name*) (parametric-var/sc: name*))
               #:when (free-identifier=? name name*)
-              (printf "free-id ~a ~a~n" name name*)
               (hash-set! memo-table (list sc name) 'free)
               (escape #t)]
              [_
