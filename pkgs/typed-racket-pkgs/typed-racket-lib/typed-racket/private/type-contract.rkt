@@ -9,7 +9,7 @@
  (utils tc-utils)
  (env type-name-env type-alias-env)
  (rep rep-utils)
- (types resolve union utils kw-types)
+ (types resolve union utils kw-types names)
  (prefix-in t: (types abbrev numeric-tower))
  (private parse-type syntax-properties)
  racket/match racket/syntax racket/list
@@ -228,11 +228,10 @@
                 => (λ (sc) (printf "hit ~a~n" type) sc)]
                [else
                 (define sc (match type match-clause ...))
-                (if (not (or (member (Type-seq type) (dont-cache))
-                             (ormap (λ (n) (member n (fv type))) (bound-names))))
-                    (hash-set! sc-cache key sc)
-                (printf "didn't cache ~a~n" type)
-                    )
+                (unless (or (ormap (λ (n) (member n (fv type))) (bound-names))
+                            (ormap (λ (n) (member n (free-names type)))
+                                   (bound-names)))
+                  (hash-set! sc-cache key sc))
                 sc]))]))
 
 (define (type->static-contract type init-fail #:typed-side [typed-side #t])
